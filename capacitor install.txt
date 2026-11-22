@@ -1,0 +1,8 @@
+npm install
+npm install @tanstack/react-query axios @capacitor/core
+npm install -D @capacitor/cli
+
+
+npx cap init "Browser RPG" "com.seujogo.browserrpg" --web-dir=dist
+
+make restart

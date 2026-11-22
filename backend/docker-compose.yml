@@ -1,0 +1,87 @@
+services:
+  nginx:
+      image: nginx:alpine
+      container_name: rpg_nginx
+      restart: unless-stopped
+      ports:
+        - "8000:80"
+      volumes:
+        - ./:/var/www
+        - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      depends_on:
+        - app
+      networks:
+        - rpg_backend_net
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rpg_api
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+      - /var/www/vendor
+      - /var/www/storage/framework/views
+      - /var/www/storage/framework/cache
+    # ports:
+    #   - "8000:8000"
+    # command: php artisan serve --host=0.0.0.0 --port=8000
+    # command: sh -c "if [ -f artisan ]; then php artisan serve --host=0.0.0.0 --port=8000; else tail -f /dev/null; fi"
+    # command: >
+    #   sh -c "
+    #     if [ -f composer.json ] && [ ! -f vendor/autoload.php ]; then
+    #       composer install --no-interaction --prefer-dist;
+    #     fi;
+    #     if [ -f artisan ]; then
+    #       php artisan serve --host=0.0.0.0 --port=8000;
+    #     else
+    #       tail -f /dev/null;
+    #     fi
+    #   "
+    command: >
+      sh -c "
+        if [ -f composer.json ] && [ ! -f vendor/autoload.php ]; then
+          composer install --no-interaction --prefer-dist;
+        fi;
+        php-fpm
+      "
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - rpg_backend_net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: rpg_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-rpg_game}
+      POSTGRES_USER: ${DB_USERNAME:-rpg_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-rpg_secret}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - rpg_backend_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: rpg_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - rpg_backend_net
+
+networks:
+  rpg_backend_net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:
