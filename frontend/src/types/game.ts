@@ -64,3 +64,39 @@ export interface WorldBootstrapResponse {
   characters: Character[];
   initial_rank: CultivationRank | null;
 }
+
+export interface Monster {
+  id: number;
+  slug: string;
+  name: string;
+  zone_name: string;
+  recommended_level: number;
+  energy_cost: number;
+  max_hp: number;
+  attack: number;
+  defense: number;
+  agility: number;
+  xp_reward: number;
+  spirit_stones_reward: number;
+}
+
+export interface CombatLogEntry {
+  round: number;
+  actor: 'player' | 'monster';
+  damage: number;
+  crit: boolean;
+  target_hp: number;
+  text: string;
+}
+
+export interface HuntResult {
+  outcome: 'victory' | 'defeat';
+  rounds: number;
+  xp_gained: number;
+  spirit_stones_gained: number;
+  levels_gained: number;
+  rank_up_title: string | null;
+  combat_log: CombatLogEntry[];
+  battle_id: number;
+  character: Character;
+}

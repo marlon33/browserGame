@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CharacterController;
+use App\Http\Controllers\Api\GameplayController;
 use App\Http\Controllers\Api\WorldController;
 use Illuminate\Support\Facades\Route;
 
@@ -24,4 +25,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/world/bootstrap', [WorldController::class, 'bootstrap']);
     Route::post('/characters', [CharacterController::class, 'store']);
     Route::get('/characters/active', [CharacterController::class, 'active']);
+
+    // Loop Principal: Cultivo, Atributos & Caça PvE
+    Route::get('/gameplay/monsters', [GameplayController::class, 'monsters']);
+    Route::post('/gameplay/meditate', [GameplayController::class, 'meditate']);
+    Route::post('/gameplay/allocate-stat', [GameplayController::class, 'allocateStat']);
+    Route::post('/gameplay/hunt', [GameplayController::class, 'hunt']);
 });
