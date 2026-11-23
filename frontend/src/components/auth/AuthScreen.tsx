@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useAuth } from '../../hooks/useAuth';
-import { getErrorMessage } from '../../utils/getErrorMessage';
+import { useAuth } from '@/hooks/useAuth';
+import { getErrorMessage } from '@/utils/getErrorMessage';
 
 type AuthView = 'login' | 'register' | 'forgot' | 'reset';
 
