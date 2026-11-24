@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useGameplay, type StatKey } from '@/hooks/useGameplay';
 import { useInventory } from '@/hooks/useInventory';
 import { getErrorMessage } from '@/utils/getErrorMessage';
+import { Toast, type ToastData } from '@/components/ui/Toast';
 import type { Character, HuntResult, Item } from '@/types/game';
 
 interface CharacterHudProps {
@@ -47,8 +48,12 @@ export function CharacterHud({
   const [activeTab, setActiveTab] = useState<GameTab>('cultivate');
   const [bagFilter, setBagFilter] = useState<ItemFilter>('all');
   const [shopFilter, setShopFilter] = useState<ItemFilter>('all');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastData | null>(null);
   const [lastBattle, setLastBattle] = useState<HuntResult | null>(null);
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ id: Date.now(), type, message });
+  };
 
   const {
     monsters,
@@ -112,39 +117,44 @@ export function CharacterHud({
   );
 
   const handleMeditate = () => {
-    setToastMessage(null);
     meditateMutation.mutate(undefined, {
       onSuccess: (data) => {
         let msg = data.message;
         if (data.levels_gained > 0) msg += ` 🎉 Nível ${data.character.level}!`;
         if (data.rank_up_title) msg += ` ⚡ Patente: ${data.rank_up_title}!`;
-        setToastMessage(msg);
+        showToast('success', msg);
       },
+      onError: (err) => showToast('error', getErrorMessage(err)),
     });
   };
 
+  const handleAllocateStat = (stat: StatKey, amount: number) => {
+    allocateStatMutation.mutate(
+      { stat, amount },
+      {
+        onSuccess: (data) => showToast('success', data.message),
+        onError: (err) => showToast('error', getErrorMessage(err)),
+      }
+    );
+  };
+
   const handleHunt = (monsterId: number) => {
-    setToastMessage(null);
     huntMutation.mutate(monsterId, {
       onSuccess: (result) => {
         setLastBattle(result);
         if (result.rank_up_title) {
-          setToastMessage(`⚡ Ascensão Espiritual! Você alcançou ${result.rank_up_title}!`);
+          showToast('success', `⚡ Ascensão Espiritual! Você alcançou ${result.rank_up_title}!`);
         } else if (result.levels_gained > 0) {
-          setToastMessage(`🎉 Vitória! Você avançou para o Nível ${result.character.level}!`);
+          showToast('success', `🎉 Vitória! Você avançou para o Nível ${result.character.level}!`);
+        } else if (result.outcome === 'victory') {
+          showToast('success', `🏆 Vitória! +${result.xp_gained} XP e +${result.spirit_stones_gained} Pedras.`);
+        } else {
+          showToast('error', '💀 Você foi derrotado! Recupere seu HP antes de caçar novamente.');
         }
       },
+      onError: (err) => showToast('error', getErrorMessage(err)),
     });
   };
-
-  const activeError =
-    meditateMutation.error ||
-    allocateStatMutation.error ||
-    huntMutation.error ||
-    buyMutation.error ||
-    equipMutation.error ||
-    useItemMutation.error ||
-    sellMutation.error;
 
   const statList: { key: StatKey; label: string; total: number; bonus: number; desc: string }[] = [
     {
@@ -187,6 +197,8 @@ export function CharacterHud({
 
   return (
     <div className="lobby-shell">
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
+
       <header className="topbar" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
           <span className="topbar-brand">{character.name}</span>
@@ -272,9 +284,9 @@ export function CharacterHud({
                     type="button"
                     disabled={useItemMutation.isPending}
                     onClick={() => {
-                      setToastMessage(null);
                       useItemMutation.mutate(healingPotionEntry.id, {
-                        onSuccess: (d) => setToastMessage(d.message),
+                        onSuccess: (d) => showToast('success', d.message),
+                        onError: (err) => showToast('error', getErrorMessage(err)),
                       });
                     }}
                     title={`Usar ${healingPotionEntry.item.name}`}
@@ -434,7 +446,7 @@ export function CharacterHud({
                       type="button"
                       aria-label={`Aumentar ${item.label}`}
                       disabled={allocateStatMutation.isPending}
-                      onClick={() => allocateStatMutation.mutate({ stat: item.key, amount: 1 })}
+                      onClick={() => handleAllocateStat(item.key, 1)}
                       style={{
                         minWidth: '34px',
                         height: '30px',
@@ -454,7 +466,7 @@ export function CharacterHud({
                         type="button"
                         aria-label={`Aumentar ${item.label} em 5`}
                         disabled={allocateStatMutation.isPending}
-                        onClick={() => allocateStatMutation.mutate({ stat: item.key, amount: 5 })}
+                        onClick={() => handleAllocateStat(item.key, 5)}
                         style={{
                           minWidth: '34px',
                           height: '24px',
@@ -525,18 +537,6 @@ export function CharacterHud({
               🏛️ Mercado
             </button>
           </div>
-
-          {toastMessage && (
-            <div className="alert-box alert-success" style={{ marginBottom: '1rem' }}>
-              {toastMessage}
-            </div>
-          )}
-
-          {activeError && (
-            <div className="alert-box alert-error" style={{ marginBottom: '1rem' }}>
-              {getErrorMessage(activeError)}
-            </div>
-          )}
 
           {/* ABA 1: CULTIVO */}
           {activeTab === 'cultivate' && (
@@ -811,7 +811,12 @@ export function CharacterHud({
                         <button
                           type="button"
                           disabled={equipMutation.isPending}
-                          onClick={() => equipMutation.mutate(equipped.id)}
+                          onClick={() =>
+                            equipMutation.mutate(equipped.id, {
+                              onSuccess: (d) => showToast('success', d.message),
+                              onError: (err) => showToast('error', getErrorMessage(err)),
+                            })
+                          }
                           style={{
                             fontSize: '0.68rem',
                             padding: '0.2rem 0.4rem',
@@ -900,9 +905,9 @@ export function CharacterHud({
                               type="button"
                               disabled={useItemMutation.isPending}
                               onClick={() => {
-                                setToastMessage(null);
                                 useItemMutation.mutate(entry.id, {
-                                  onSuccess: (d) => setToastMessage(d.message),
+                                  onSuccess: (d) => showToast('success', d.message),
+                                  onError: (err) => showToast('error', getErrorMessage(err)),
                                 });
                               }}
                               style={{
@@ -924,9 +929,9 @@ export function CharacterHud({
                               type="button"
                               disabled={equipMutation.isPending}
                               onClick={() => {
-                                setToastMessage(null);
                                 equipMutation.mutate(entry.id, {
-                                  onSuccess: (d) => setToastMessage(d.message),
+                                  onSuccess: (d) => showToast('success', d.message),
+                                  onError: (err) => showToast('error', getErrorMessage(err)),
                                 });
                               }}
                               style={{
@@ -950,9 +955,9 @@ export function CharacterHud({
                               type="button"
                               disabled={sellMutation.isPending}
                               onClick={() => {
-                                setToastMessage(null);
                                 sellMutation.mutate(entry.id, {
-                                  onSuccess: (d) => setToastMessage(d.message),
+                                  onSuccess: (d) => showToast('success', d.message),
+                                  onError: (err) => showToast('error', getErrorMessage(err)),
                                 });
                               }}
                               style={{
@@ -1057,10 +1062,12 @@ export function CharacterHud({
                               type="button"
                               disabled={buyMutation.isPending || !canBuy1}
                               onClick={() => {
-                                setToastMessage(null);
                                 buyMutation.mutate(
                                   { item_id: item.id, quantity: 1 },
-                                  { onSuccess: (d) => setToastMessage(d.message) }
+                                  {
+                                    onSuccess: (d) => showToast('success', d.message),
+                                    onError: (err) => showToast('error', getErrorMessage(err)),
+                                  }
                                 );
                               }}
                               style={{
@@ -1083,10 +1090,12 @@ export function CharacterHud({
                                 type="button"
                                 disabled={buyMutation.isPending || !canBuy5}
                                 onClick={() => {
-                                  setToastMessage(null);
                                   buyMutation.mutate(
                                     { item_id: item.id, quantity: 5 },
-                                    { onSuccess: (d) => setToastMessage(d.message) }
+                                    {
+                                      onSuccess: (d) => showToast('success', d.message),
+                                      onError: (err) => showToast('error', getErrorMessage(err)),
+                                    }
                                   );
                                 }}
                                 style={{
