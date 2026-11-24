@@ -33,6 +33,8 @@ class Character extends Model
 
     protected $appends = [
         'effective_stats',
+        'combat_summary',
+        'next_level_xp',
     ];
 
     protected function casts(): array
@@ -73,8 +75,13 @@ class Character extends Model
         return $this->hasMany(CharacterItem::class);
     }
 
+    public function getNextLevelXpAttribute(): int
+    {
+        return $this->xpForNextLevel();
+    }
+
     /**
-     * Calcula os atributos totais somando atributos base + itens equipados
+     * Atributos totais somando base + equipamentos
      */
     public function getEffectiveStatsAttribute(): array
     {
@@ -107,6 +114,32 @@ class Character extends Model
             'bonus_constitution' => $bonusCon,
             'bonus_spirit_power' => $bonusSpi,
             'bonus_max_hp' => $bonusHp,
+        ];
+    }
+
+    /**
+     * Status derivados de combate (Ataque, Defesa, Crítico e Poder de Combate)
+     */
+    public function getCombatSummaryAttribute(): array
+    {
+        $stats = $this->effective_stats;
+        $rankMult = $this->cultivationRank->stat_multiplier ?? 1.0;
+
+        $attack = (int) round(($stats['strength'] * 1.8 + $stats['spirit_power'] * 1.2) * $rankMult);
+        $defense = (int) round(($stats['constitution'] * 1.4 + $stats['agility'] * 0.5) * $rankMult);
+        $critChance = min(45, 5 + (int) floor($stats['agility'] * 0.4));
+        $combatPower = (int) round(
+            ($attack * 2.2) +
+            ($defense * 1.8) +
+            ($stats['max_hp'] * 0.35) +
+            ($stats['agility'] * 1.5)
+        );
+
+        return [
+            'attack' => $attack,
+            'defense' => $defense,
+            'crit_chance_pct' => $critChance,
+            'combat_power' => $combatPower,
         ];
     }
 
@@ -181,9 +214,6 @@ class Character extends Model
         ];
     }
 
-    /**
-     * Adiciona um item empilhável ou individual ao inventário do personagem
-     */
     public function addItemToInventory(Item $item, int $quantity = 1): CharacterItem
     {
         if ($item->type === 'consumable') {

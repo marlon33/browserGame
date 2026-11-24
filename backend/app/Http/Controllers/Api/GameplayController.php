@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\BattleLog;
 use App\Models\Character;
 use App\Models\Monster;
 use App\Services\CombatEngineService;
@@ -35,11 +36,13 @@ class GameplayController extends Controller
     }
 
     /**
-     * Lista monstros disponíveis para caça PvE
+     * Lista monstros disponíveis com tabela de drops (transparência de farming)
      */
     public function monsters(): JsonResponse
     {
-        $monsters = Monster::orderBy('recommended_level')->get();
+        $monsters = Monster::with(['drops.item:id,name,rarity,type'])
+            ->orderBy('recommended_level')
+            ->get();
 
         return response()->json([
             'monsters' => $monsters,
@@ -47,7 +50,25 @@ class GameplayController extends Controller
     }
 
     /**
-     * Treino de Meditação Espiritual (Consome energia -> Gera XP e Pedras Espirituais)
+     * Histórico das últimas 10 batalhas do personagem
+     */
+    public function battleHistory(Request $request): JsonResponse
+    {
+        $character = $this->resolveCharacter($request);
+
+        $logs = BattleLog::with('monster:id,name,zone_name,recommended_level')
+            ->where('character_id', $character->id)
+            ->orderByDesc('id')
+            ->limit(10)
+            ->get();
+
+        return response()->json([
+            'history' => $logs,
+        ]);
+    }
+
+    /**
+     * Treino de Meditação Espiritual
      */
     public function meditate(Request $request): JsonResponse
     {
@@ -71,9 +92,9 @@ class GameplayController extends Controller
 
             $char->energy -= $energyCost;
 
-            // Recupera 35% do HP durante a meditação
-            $healedHp = (int) round($char->max_hp * 0.35);
-            $char->hp = min($char->max_hp, $char->hp + $healedHp);
+            $effectiveMaxHp = $char->effective_stats['max_hp'];
+            $healedHp = (int) round($effectiveMaxHp * 0.35);
+            $char->hp = min($effectiveMaxHp, $char->hp + $healedHp);
 
             $xpMult = $char->server->xp_multiplier ?? 1.0;
             $baseXp = 35 + ($char->level * 12);
@@ -99,7 +120,7 @@ class GameplayController extends Controller
     }
 
     /**
-     * Distribui pontos de atributo disponíveis
+     * Distribui pontos de atributo (+1 ou +5)
      */
     public function allocateStat(Request $request): JsonResponse
     {
@@ -121,14 +142,13 @@ class GameplayController extends Controller
 
             if ($char->stat_points < $amount) {
                 throw ValidationException::withMessages([
-                    'stat_points' => ['Pontos de atributo insuficientes.'],
+                    'stat_points' => ["Pontos livres insuficientes ({$char->stat_points} disponíveis)."],
                 ]);
             }
 
             $char->stat_points -= $amount;
             $char->{$stat} += $amount;
 
-            // Constituição aumenta HP máximo imediatamente
             if ($stat === 'constitution') {
                 $hpBonus = $amount * 12;
                 $char->max_hp += $hpBonus;
@@ -145,7 +165,7 @@ class GameplayController extends Controller
     }
 
     /**
-     * Inicia uma caça PvE contra um monstro
+     * Inicia caça PvE
      */
     public function hunt(Request $request, CombatEngineService $combatEngine): JsonResponse
     {

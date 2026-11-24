@@ -45,6 +45,13 @@ export interface EffectiveStats {
   bonus_max_hp: number;
 }
 
+export interface CombatSummary {
+  attack: number;
+  defense: number;
+  crit_chance_pct: number;
+  combat_power: number;
+}
+
 export interface Character {
   id: number;
   user_id: number;
@@ -54,6 +61,7 @@ export interface Character {
   name: string;
   level: number;
   experience: number;
+  next_level_xp?: number;
   hp: number;
   max_hp: number;
   energy: number;
@@ -67,6 +75,7 @@ export interface Character {
   spirit_power: number;
   stat_points: number;
   effective_stats?: EffectiveStats;
+  combat_summary?: CombatSummary;
   server?: GameServer;
   realm?: Realm;
   cultivation_rank?: CultivationRank;
@@ -77,6 +86,21 @@ export interface WorldBootstrapResponse {
   realms: Realm[];
   characters: Character[];
   initial_rank: CultivationRank | null;
+}
+
+export interface MonsterDropPreview {
+  id: number;
+  monster_id: number;
+  item_id: number;
+  drop_chance_pct: number;
+  min_quantity: number;
+  max_quantity: number;
+  item?: {
+    id: number;
+    name: string;
+    rarity: 'common' | 'rare' | 'epic' | 'legendary';
+    type: 'weapon' | 'armor' | 'accessory' | 'consumable';
+  };
 }
 
 export interface Monster {
@@ -92,6 +116,7 @@ export interface Monster {
   agility: number;
   xp_reward: number;
   spirit_stones_reward: number;
+  drops?: MonsterDropPreview[];
 }
 
 export interface CombatLogEntry {
@@ -121,6 +146,21 @@ export interface HuntResult {
   combat_log: CombatLogEntry[];
   battle_id: number;
   character: Character;
+}
+
+export interface BattleHistoryEntry {
+  id: number;
+  outcome: 'victory' | 'defeat';
+  rounds: number;
+  xp_gained: number;
+  spirit_stones_gained: number;
+  created_at: string;
+  monster?: {
+    id: number;
+    name: string;
+    zone_name: string;
+    recommended_level: number;
+  };
 }
 
 export interface Item {

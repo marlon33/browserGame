@@ -29,6 +29,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Loop Principal: Cultivo, Atributos & Caça PvE
     Route::get('/gameplay/monsters', [GameplayController::class, 'monsters']);
+    Route::get('/gameplay/history', [GameplayController::class, 'battleHistory']);
     Route::post('/gameplay/meditate', [GameplayController::class, 'meditate']);
     Route::post('/gameplay/allocate-stat', [GameplayController::class, 'allocateStat']);
     Route::post('/gameplay/hunt', [GameplayController::class, 'hunt']);

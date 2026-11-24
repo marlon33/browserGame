@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { Character, HuntResult, Monster } from '@/types/game';
+import type { BattleHistoryEntry, Character, HuntResult, Monster } from '@/types/game';
 
 export type StatKey = 'strength' | 'agility' | 'constitution' | 'spirit_power';
 
@@ -8,6 +8,7 @@ export function useGameplay(characterId: number) {
   const queryClient = useQueryClient();
   const charQueryKey = ['character', 'active', String(characterId)];
   const invQueryKey = ['inventory', String(characterId)];
+  const historyQueryKey = ['gameplay', 'history', String(characterId)];
 
   const monstersQuery = useQuery({
     queryKey: ['gameplay', 'monsters'],
@@ -16,6 +17,15 @@ export function useGameplay(characterId: number) {
       return data.monsters;
     },
     staleTime: 1000 * 60 * 5,
+  });
+
+  const historyQuery = useQuery({
+    queryKey: historyQueryKey,
+    queryFn: async () => {
+      const { data } = await api.get<{ history: BattleHistoryEntry[] }>('/gameplay/history');
+      return data.history;
+    },
+    staleTime: 1000 * 30,
   });
 
   const meditateMutation = useMutation({
@@ -57,6 +67,7 @@ export function useGameplay(characterId: number) {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(charQueryKey, data.character);
+      queryClient.invalidateQueries({ queryKey: historyQueryKey });
       if (data.items_dropped && data.items_dropped.length > 0) {
         queryClient.invalidateQueries({ queryKey: invQueryKey });
       }
@@ -66,6 +77,7 @@ export function useGameplay(characterId: number) {
   return {
     monsters: monstersQuery.data ?? [],
     isLoadingMonsters: monstersQuery.isLoading,
+    battleHistory: historyQuery.data ?? [],
     meditateMutation,
     allocateStatMutation,
     huntMutation,

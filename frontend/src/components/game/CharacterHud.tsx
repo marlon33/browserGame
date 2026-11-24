@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useGameplay, type StatKey } from '@/hooks/useGameplay';
 import { useInventory } from '@/hooks/useInventory';
 import { getErrorMessage } from '@/utils/getErrorMessage';
@@ -11,6 +11,7 @@ interface CharacterHudProps {
 }
 
 type GameTab = 'cultivate' | 'hunt' | 'bag' | 'shop';
+type ItemFilter = 'all' | 'weapon' | 'armor' | 'accessory' | 'consumable';
 
 const RARITY_COLORS: Record<Item['rarity'], string> = {
   common: '#9ca3af',
@@ -28,11 +29,11 @@ const TYPE_LABELS: Record<Item['type'], string> = {
 
 function formatItemStats(item: Item): string {
   const parts: string[] = [];
-  if (item.bonus_strength) parts.push(`+${item.bonus_strength} Força`);
-  if (item.bonus_agility) parts.push(`+${item.bonus_agility} Agilidade`);
-  if (item.bonus_constitution) parts.push(`+${item.bonus_constitution} Constituição`);
-  if (item.bonus_spirit_power) parts.push(`+${item.bonus_spirit_power} Poder Esp.`);
-  if (item.bonus_max_hp) parts.push(`+${item.bonus_max_hp} HP Máx`);
+  if (item.bonus_strength) parts.push(`+${item.bonus_strength} FOR`);
+  if (item.bonus_agility) parts.push(`+${item.bonus_agility} AGI`);
+  if (item.bonus_constitution) parts.push(`+${item.bonus_constitution} CON`);
+  if (item.bonus_spirit_power) parts.push(`+${item.bonus_spirit_power} ESP`);
+  if (item.bonus_max_hp) parts.push(`+${item.bonus_max_hp} HP`);
   if (item.heal_hp) parts.push(`Cura ${item.heal_hp} HP`);
   if (item.restore_energy) parts.push(`+${item.restore_energy} Energia`);
   return parts.join(' • ');
@@ -44,12 +45,15 @@ export function CharacterHud({
   onLogout,
 }: CharacterHudProps) {
   const [activeTab, setActiveTab] = useState<GameTab>('cultivate');
+  const [bagFilter, setBagFilter] = useState<ItemFilter>('all');
+  const [shopFilter, setShopFilter] = useState<ItemFilter>('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [lastBattle, setLastBattle] = useState<HuntResult | null>(null);
 
   const {
     monsters,
     isLoadingMonsters,
+    battleHistory,
     meditateMutation,
     allocateStatMutation,
     huntMutation,
@@ -66,17 +70,46 @@ export function CharacterHud({
   } = useInventory(character.id);
 
   const eff = character.effective_stats;
+  const combat = character.combat_summary;
   const displayMaxHp = eff?.max_hp ?? character.max_hp;
   const hpPercent = Math.min(100, Math.round((character.hp / Math.max(1, displayMaxHp)) * 100));
   const energyPercent = Math.min(
     100,
     Math.round((character.energy / Math.max(1, character.max_energy)) * 100)
   );
-  const xpRequired = Math.round(100 * Math.pow(character.level, 1.45));
+  const xpRequired = character.next_level_xp ?? Math.round(100 * Math.pow(character.level, 1.45));
   const xpPercent = Math.min(100, Math.round((character.experience / Math.max(1, xpRequired)) * 100));
 
   const realmColor = character.realm?.primary_color || '#d4af37';
   const rankColor = character.cultivation_rank?.badge_color || '#cd7f32';
+
+  // Atalho rápido de poção de cura na mochila
+  const healingPotionEntry = useMemo(
+    () => inventory.find((i) => i.item.type === 'consumable' && i.item.heal_hp > 0 && i.quantity > 0),
+    [inventory]
+  );
+
+  // Slots equipados (Paper Doll)
+  const equippedSlots = useMemo(() => {
+    const weapon = inventory.find((i) => i.is_equipped && i.item.type === 'weapon');
+    const armor = inventory.find((i) => i.is_equipped && i.item.type === 'armor');
+    const accessory = inventory.find((i) => i.is_equipped && i.item.type === 'accessory');
+    return [
+      { slot: 'weapon' as const, label: '⚔️ Arma', equipped: weapon },
+      { slot: 'armor' as const, label: '🛡️ Armadura', equipped: armor },
+      { slot: 'accessory' as const, label: '📿 Acessório', equipped: accessory },
+    ];
+  }, [inventory]);
+
+  const filteredInventory = useMemo(
+    () => (bagFilter === 'all' ? inventory : inventory.filter((i) => i.item.type === bagFilter)),
+    [inventory, bagFilter]
+  );
+
+  const filteredShop = useMemo(
+    () => (shopFilter === 'all' ? shopItems : shopItems.filter((i) => i.type === shopFilter)),
+    [shopItems, shopFilter]
+  );
 
   const handleMeditate = () => {
     setToastMessage(null);
@@ -133,7 +166,7 @@ export function CharacterHud({
       label: 'Constituição',
       total: eff?.constitution ?? character.constitution,
       bonus: eff?.bonus_constitution ?? 0,
-      desc: '+12 HP Máx & defesa',
+      desc: '+12 HP & defesa',
     },
     {
       key: 'spirit_power',
@@ -144,10 +177,18 @@ export function CharacterHud({
     },
   ];
 
+  const filterOptions: { key: ItemFilter; label: string }[] = [
+    { key: 'all', label: 'Todos' },
+    { key: 'weapon', label: 'Armas' },
+    { key: 'armor', label: 'Armaduras' },
+    { key: 'accessory', label: 'Acessórios' },
+    { key: 'consumable', label: 'Pílulas' },
+  ];
+
   return (
     <div className="lobby-shell">
       <header className="topbar" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
           <span className="topbar-brand">{character.name}</span>
           <span
             style={{
@@ -162,6 +203,20 @@ export function CharacterHud({
           >
             {character.cultivation_rank?.title ?? 'Bronze 1 Estrela'}
           </span>
+          {combat && (
+            <span
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                padding: '0.18rem 0.55rem',
+                borderRadius: '999px',
+                background: 'rgba(56, 189, 248, 0.12)',
+                color: '#38bdf8',
+              }}
+            >
+              CP {combat.combat_power.toLocaleString('pt-BR')}
+            </span>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -185,7 +240,7 @@ export function CharacterHud({
       </header>
 
       <main className="lobby-content">
-        {/* COLUNA 1: FICHA VITAL & ATRIBUTOS EFETIVOS */}
+        {/* COLUNA 1: FICHA VITAL, STATUS DERIVADOS & ATRIBUTOS */}
         <section className="auth-card" style={{ maxWidth: '100%' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
             <span
@@ -204,13 +259,40 @@ export function CharacterHud({
             </span>
           </div>
 
-          {/* HP */}
+          {/* HP + Botão de Cura Rápida */}
           <div style={{ marginBottom: '0.75rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
               <span>Vitalidade (HP)</span>
-              <strong>
-                {character.hp} / {displayMaxHp}
-              </strong>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <strong>
+                  {character.hp} / {displayMaxHp}
+                </strong>
+                {healingPotionEntry && character.hp < displayMaxHp && (
+                  <button
+                    type="button"
+                    disabled={useItemMutation.isPending}
+                    onClick={() => {
+                      setToastMessage(null);
+                      useItemMutation.mutate(healingPotionEntry.id, {
+                        onSuccess: (d) => setToastMessage(d.message),
+                      });
+                    }}
+                    title={`Usar ${healingPotionEntry.item.name}`}
+                    style={{
+                      padding: '0.12rem 0.5rem',
+                      borderRadius: '6px',
+                      border: '1px solid var(--jade-accent)',
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      color: 'var(--jade-accent)',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    +Curar ({healingPotionEntry.quantity})
+                  </button>
+                )}
+              </div>
             </div>
             <div style={{ height: '10px', background: 'var(--bg-void)', borderRadius: '999px', overflow: 'hidden' }}>
               <div
@@ -245,7 +327,7 @@ export function CharacterHud({
           </div>
 
           {/* XP */}
-          <div style={{ marginBottom: '1.1rem' }}>
+          <div style={{ marginBottom: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
               <span>Experiência (XP)</span>
               <strong>
@@ -264,6 +346,35 @@ export function CharacterHud({
             </div>
           </div>
 
+          {/* Status Derivados de Combate */}
+          {combat && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '0.5rem',
+                marginBottom: '0.9rem',
+                background: 'var(--bg-void)',
+                padding: '0.6rem',
+                borderRadius: '10px',
+                textAlign: 'center',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Ataque</div>
+                <strong style={{ fontSize: '0.92rem', color: '#f87171' }}>{combat.attack}</strong>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Defesa</div>
+                <strong style={{ fontSize: '0.92rem', color: '#60a5fa' }}>{combat.defense}</strong>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Crítico</div>
+                <strong style={{ fontSize: '0.92rem', color: '#fbbf24' }}>{combat.crit_chance_pct}%</strong>
+              </div>
+            </div>
+          )}
+
           {/* Moedas */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '1.1rem' }}>
             <div style={{ background: 'var(--bg-void)', padding: '0.65rem', borderRadius: '10px' }}>
@@ -280,7 +391,7 @@ export function CharacterHud({
             </div>
           </div>
 
-          {/* Atributos */}
+          {/* Atributos & Alocação (+1 / +5) */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
             <h3 style={{ fontSize: '1rem' }}>Atributos</h3>
             {character.stat_points > 0 && (
@@ -301,6 +412,7 @@ export function CharacterHud({
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
+                  gap: '0.35rem',
                 }}
               >
                 <div>
@@ -317,32 +429,55 @@ export function CharacterHud({
                 </div>
 
                 {character.stat_points > 0 && (
-                  <button
-                    type="button"
-                    aria-label={`Aumentar ${item.label}`}
-                    disabled={allocateStatMutation.isPending}
-                    onClick={() => allocateStatMutation.mutate({ stat: item.key, amount: 1 })}
-                    style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--gold-primary)',
-                      background: 'rgba(212, 175, 55, 0.15)',
-                      color: 'var(--gold-primary)',
-                      fontWeight: 800,
-                      fontSize: '1.1rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    +
-                  </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <button
+                      type="button"
+                      aria-label={`Aumentar ${item.label}`}
+                      disabled={allocateStatMutation.isPending}
+                      onClick={() => allocateStatMutation.mutate({ stat: item.key, amount: 1 })}
+                      style={{
+                        minWidth: '34px',
+                        height: '30px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--gold-primary)',
+                        background: 'rgba(212, 175, 55, 0.15)',
+                        color: 'var(--gold-primary)',
+                        fontWeight: 800,
+                        fontSize: '0.88rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      +1
+                    </button>
+                    {character.stat_points >= 5 && (
+                      <button
+                        type="button"
+                        aria-label={`Aumentar ${item.label} em 5`}
+                        disabled={allocateStatMutation.isPending}
+                        onClick={() => allocateStatMutation.mutate({ stat: item.key, amount: 5 })}
+                        style={{
+                          minWidth: '34px',
+                          height: '24px',
+                          borderRadius: '6px',
+                          border: '1px solid rgba(56, 189, 248, 0.5)',
+                          background: 'rgba(56, 189, 248, 0.12)',
+                          color: '#38bdf8',
+                          fontWeight: 700,
+                          fontSize: '0.72rem',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        +5
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             ))}
           </div>
         </section>
 
-        {/* COLUNA 2: ABAS DO MUNDO (MEDITAR, CAÇAR, MOCHILA, MERCADO) */}
+        {/* COLUNA 2: ABAS DO MUNDO */}
         <section className="auth-card" style={{ maxWidth: '100%' }}>
           <div
             className="auth-tabs"
@@ -437,10 +572,40 @@ export function CharacterHud({
                   ? 'Energia Insuficiente (10)'
                   : 'Meditar Agora (-10 Energia)'}
               </button>
+
+              {battleHistory.length > 0 && (
+                <div style={{ marginTop: '0.6rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                    Últimas Expedições
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    {battleHistory.slice(0, 5).map((h) => (
+                      <div
+                        key={h.id}
+                        style={{
+                          background: 'var(--bg-void)',
+                          padding: '0.55rem 0.75rem',
+                          borderRadius: '8px',
+                          fontSize: '0.78rem',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <span>
+                          {h.outcome === 'victory' ? '🏆' : '💀'} {h.monster?.name ?? 'Besta'}
+                        </span>
+                        <span style={{ color: h.outcome === 'victory' ? 'var(--jade-accent)' : '#fca5a5' }}>
+                          {h.outcome === 'victory' ? `+${h.xp_gained} XP` : 'Derrota'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* ABA 2: CAÇA PVE */}
+          {/* ABA 2: CAÇA PVE COM PREVIEW DE DROPS E DIFICULDADE */}
           {activeTab === 'hunt' && (
             <div className="form-stack">
               <h3 style={{ fontSize: '1.15rem' }}>Territórios de Caça</h3>
@@ -451,6 +616,13 @@ export function CharacterHud({
                 <div className="form-stack">
                   {monsters.map((monster) => {
                     const canAfford = character.energy >= monster.energy_cost && character.hp > 0;
+                    const levelDiff = monster.recommended_level - character.level;
+                    const diffBadge =
+                      levelDiff <= 0
+                        ? { label: 'Fácil', color: 'var(--jade-accent)' }
+                        : levelDiff <= 2
+                        ? { label: 'Equilibrado', color: '#fbbf24' }
+                        : { label: 'Perigoso', color: '#f87171' };
 
                     return (
                       <div
@@ -462,16 +634,38 @@ export function CharacterHud({
                           border: '1px solid rgba(255,255,255,0.08)',
                         }}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
                           <strong style={{ fontSize: '0.94rem' }}>{monster.name}</strong>
-                          <span style={{ fontSize: '0.74rem', color: 'var(--gold-primary)', fontWeight: 700 }}>
-                            Nv. {monster.recommended_level}
+                          <span style={{ fontSize: '0.72rem', color: diffBadge.color, fontWeight: 700 }}>
+                            Nv.{monster.recommended_level} • {diffBadge.label}
                           </span>
                         </div>
 
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
                           {monster.zone_name} • HP {monster.max_hp} • ATQ {monster.attack} • DEF {monster.defense}
                         </div>
+
+                        {/* Drops possíveis */}
+                        {monster.drops && monster.drops.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.45rem' }}>
+                            {monster.drops.map((d) =>
+                              d.item ? (
+                                <span
+                                  key={d.id}
+                                  style={{
+                                    fontSize: '0.68rem',
+                                    padding: '0.12rem 0.45rem',
+                                    borderRadius: '6px',
+                                    background: 'rgba(255,255,255,0.05)',
+                                    color: RARITY_COLORS[d.item.rarity],
+                                  }}
+                                >
+                                  🎁 {d.item.name} ({d.drop_chance_pct}%)
+                                </span>
+                              ) : null
+                            )}
+                          </div>
+                        )}
 
                         <div
                           style={{
@@ -578,20 +772,100 @@ export function CharacterHud({
             </div>
           )}
 
-          {/* ABA 3: MOCHILA & EQUIPAMENTOS */}
+          {/* ABA 3: MOCHILA COM SLOTS EQUIPADOS (PAPER DOLL) & FILTROS */}
           {activeTab === 'bag' && (
             <div className="form-stack">
-              <h3 style={{ fontSize: '1.15rem' }}>Mochila Espiritual</h3>
+              <h3 style={{ fontSize: '1.15rem' }}>Equipamentos Ativos</h3>
+
+              {/* Paper Doll: 3 Slots */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+                {equippedSlots.map(({ slot, label, equipped }) => (
+                  <div
+                    key={slot}
+                    style={{
+                      background: 'var(--bg-void)',
+                      padding: '0.65rem',
+                      borderRadius: '10px',
+                      border: equipped
+                        ? `1px solid ${RARITY_COLORS[equipped.item.rarity]}66`
+                        : '1px dashed rgba(255,255,255,0.12)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      minHeight: '84px',
+                    }}
+                  >
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{label}</div>
+                    {equipped ? (
+                      <>
+                        <div
+                          style={{
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            color: RARITY_COLORS[equipped.item.rarity],
+                            margin: '0.2rem 0',
+                          }}
+                        >
+                          {equipped.item.name}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={equipMutation.isPending}
+                          onClick={() => equipMutation.mutate(equipped.id)}
+                          style={{
+                            fontSize: '0.68rem',
+                            padding: '0.2rem 0.4rem',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(255,255,255,0.15)',
+                            background: 'transparent',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Remover
+                        </button>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: '0.74rem', color: '#4b5563', marginTop: '0.3rem' }}>
+                        Vazio
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Filtros da Mochila */}
+              <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                {filterOptions.map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setBagFilter(f.key)}
+                    style={{
+                      padding: '0.3rem 0.65rem',
+                      borderRadius: '999px',
+                      border: 'none',
+                      fontSize: '0.74rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      background: bagFilter === f.key ? 'var(--gold-primary)' : 'var(--bg-void)',
+                      color: bagFilter === f.key ? '#090b10' : 'var(--text-muted)',
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
 
               {isLoadingInventory ? (
                 <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>Abrindo anel espacial...</p>
-              ) : inventory.length === 0 ? (
+              ) : filteredInventory.length === 0 ? (
                 <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>
-                  Sua mochila está vazia. Adquira equipamentos no Mercado ou cace bestas!
+                  Nenhum item nesta categoria.
                 </p>
               ) : (
                 <div className="form-stack">
-                  {inventory.map((entry) => {
+                  {filteredInventory.map((entry) => {
                     const { item } = entry;
                     const rColor = RARITY_COLORS[item.rarity];
 
@@ -704,17 +978,40 @@ export function CharacterHud({
             </div>
           )}
 
-          {/* ABA 4: MERCADO ESPIRITUAL */}
+          {/* ABA 4: MERCADO COM FILTROS & COMPRA EM LOTE PARA PÍLULAS */}
           {activeTab === 'shop' && (
             <div className="form-stack">
               <h3 style={{ fontSize: '1.15rem' }}>Pavilhão de Tesouros</h3>
+
+              <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                {filterOptions.map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setShopFilter(f.key)}
+                    style={{
+                      padding: '0.3rem 0.65rem',
+                      borderRadius: '999px',
+                      border: 'none',
+                      fontSize: '0.74rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      background: shopFilter === f.key ? 'var(--gold-primary)' : 'var(--bg-void)',
+                      color: shopFilter === f.key ? '#090b10' : 'var(--text-muted)',
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
 
               {isLoadingInventory ? (
                 <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>Carregando catálogo...</p>
               ) : (
                 <div className="form-stack">
-                  {shopItems.map((item) => {
-                    const canBuy = character.spirit_stones >= item.buy_price;
+                  {filteredShop.map((item) => {
+                    const canBuy1 = character.spirit_stones >= item.buy_price;
+                    const canBuy5 = character.spirit_stones >= item.buy_price * 5;
                     const rColor = RARITY_COLORS[item.rarity];
 
                     return (
@@ -748,36 +1045,66 @@ export function CharacterHud({
                             justifyContent: 'space-between',
                             alignItems: 'center',
                             marginTop: '0.65rem',
+                            gap: '0.4rem',
                           }}
                         >
                           <strong style={{ fontSize: '0.82rem', color: 'var(--gold-primary)' }}>
-                            {item.buy_price} Pedras Espirituais
+                            {item.buy_price} Pedras
                           </strong>
 
-                          <button
-                            type="button"
-                            disabled={buyMutation.isPending || !canBuy}
-                            onClick={() => {
-                              setToastMessage(null);
-                              buyMutation.mutate(
-                                { item_id: item.id, quantity: 1 },
-                                { onSuccess: (d) => setToastMessage(d.message) }
-                              );
-                            }}
-                            style={{
-                              minHeight: '36px',
-                              padding: '0 0.85rem',
-                              borderRadius: '8px',
-                              border: 'none',
-                              background: canBuy ? 'var(--gold-primary)' : '#374151',
-                              color: canBuy ? '#090b10' : '#9ca3af',
-                              fontWeight: 700,
-                              fontSize: '0.8rem',
-                              cursor: canBuy ? 'pointer' : 'not-allowed',
-                            }}
-                          >
-                            Comprar
-                          </button>
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <button
+                              type="button"
+                              disabled={buyMutation.isPending || !canBuy1}
+                              onClick={() => {
+                                setToastMessage(null);
+                                buyMutation.mutate(
+                                  { item_id: item.id, quantity: 1 },
+                                  { onSuccess: (d) => setToastMessage(d.message) }
+                                );
+                              }}
+                              style={{
+                                minHeight: '36px',
+                                padding: '0 0.85rem',
+                                borderRadius: '8px',
+                                border: 'none',
+                                background: canBuy1 ? 'var(--gold-primary)' : '#374151',
+                                color: canBuy1 ? '#090b10' : '#9ca3af',
+                                fontWeight: 700,
+                                fontSize: '0.8rem',
+                                cursor: canBuy1 ? 'pointer' : 'not-allowed',
+                              }}
+                            >
+                              Comprar x1
+                            </button>
+
+                            {item.type === 'consumable' && (
+                              <button
+                                type="button"
+                                disabled={buyMutation.isPending || !canBuy5}
+                                onClick={() => {
+                                  setToastMessage(null);
+                                  buyMutation.mutate(
+                                    { item_id: item.id, quantity: 5 },
+                                    { onSuccess: (d) => setToastMessage(d.message) }
+                                  );
+                                }}
+                                style={{
+                                  minHeight: '36px',
+                                  padding: '0 0.7rem',
+                                  borderRadius: '8px',
+                                  border: '1px solid var(--gold-primary)',
+                                  background: 'transparent',
+                                  color: canBuy5 ? 'var(--gold-primary)' : '#6b7280',
+                                  fontWeight: 700,
+                                  fontSize: '0.78rem',
+                                  cursor: canBuy5 ? 'pointer' : 'not-allowed',
+                                }}
+                              >
+                                x5
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
