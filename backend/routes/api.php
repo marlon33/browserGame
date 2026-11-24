@@ -37,11 +37,10 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::prefix('inventory')->group(function () {
-        Route::get('/shop', [InventoryController::class, 'shop']);
         Route::get('/', [InventoryController::class, 'index']);
         Route::post('/buy', [InventoryController::class, 'buy']);
-        Route::post('/equip', [InventoryController::class, 'equip']);
-        Route::post('/use', [InventoryController::class, 'useItem']);
-        Route::post('/sell', [InventoryController::class, 'sell']);
+        Route::post('/{characterItemId}/equip', [InventoryController::class, 'toggleEquip']);
+        Route::post('/{characterItemId}/use', [InventoryController::class, 'useItem']);
+        Route::post('/{characterItemId}/sell', [InventoryController::class, 'sell']);
     });
 });

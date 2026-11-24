@@ -456,7 +456,7 @@ export function HuntArena({
   }
 
   // ============================================================================
-  // TELA 2: APRESENTAÇÃO / INSPEÇÃO DOS STATUS DO MOB ANTES DE ATACAR
+  // TELA 2: COMPARATIVO FRENTE A FRENTE (JOGADOR À ESQUERDA vs MOB À DIREITA)
   // ============================================================================
   if (inspectedMonster) {
     const bestiary = inspectedMonster.bestiary;
@@ -475,6 +475,43 @@ export function HuntArena({
       character.energy >= inspectedMonster.energy_cost &&
       character.hp > 0 &&
       bossCooldownSec === 0;
+
+    // Status efetivos do jogador para comparação direta
+    const eff = character.effective_stats;
+    const combat = character.combat_summary;
+    const playerMaxHp = eff?.max_hp ?? character.max_hp;
+    const playerAttack =
+      combat?.attack ??
+      Math.round((eff?.strength ?? character.strength) * 2.2 + (eff?.spirit_power ?? character.spirit_power) * 1.1);
+    const playerDefense =
+      combat?.defense ??
+      Math.round((eff?.constitution ?? character.constitution) * 1.4 + (eff?.agility ?? character.agility) * 0.5);
+    const playerAgility = eff?.agility ?? character.agility;
+
+    const comparisonRows = [
+      {
+        label: 'HP Máx.',
+        playerVal: playerMaxHp,
+        mobVal: inspectedMonster.max_hp,
+      },
+      {
+        label: 'Ataque',
+        playerVal: playerAttack,
+        mobVal: inspectedMonster.attack,
+      },
+      {
+        label: 'Defesa',
+        playerVal: playerDefense,
+        mobVal: inspectedMonster.defense,
+      },
+      {
+        label: 'Agilidade',
+        playerVal: playerAgility,
+        mobVal: inspectedMonster.agility,
+      },
+    ];
+
+    const playerAttacksFirst = playerAgility >= inspectedMonster.agility;
 
     return (
       <div className="form-stack">
@@ -510,54 +547,153 @@ export function HuntArena({
               : '1px solid rgba(255,255,255,0.1)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-            <h3 style={{ fontSize: '1.15rem', color: inspectedMonster.is_boss ? '#fbbf24' : 'var(--text-main)' }}>
-              {inspectedMonster.is_boss ? '👑 ' : '👹 '}{inspectedMonster.name}
-            </h3>
-            <span
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                padding: '0.18rem 0.55rem',
-                borderRadius: '999px',
-                background: 'rgba(255,255,255,0.06)',
-                color: '#38bdf8',
-              }}
-            >
-              Nível {inspectedMonster.recommended_level}
-            </span>
-          </div>
-
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.85rem' }}>
-            Combate tático em turnos: você terá <strong>15s</strong> e até <strong>3 ações por turno</strong> (Cura, Buff/Debuff e Ataque Físico ou Magia).
-          </p>
-
-          {/* Atributos do Mob */}
+          {/* Cabeçalho VS (Jogador vs Adversário) */}
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
+              gridTemplateColumns: '1fr auto 1fr',
+              alignItems: 'center',
               gap: '0.5rem',
-              marginBottom: '0.9rem',
-              textAlign: 'center',
+              marginBottom: '0.75rem',
+              paddingBottom: '0.65rem',
+              borderBottom: '1px solid rgba(255,255,255,0.08)',
             }}
           >
-            <div style={{ background: '#111827', padding: '0.55rem', borderRadius: '8px' }}>
-              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>HP</div>
-              <strong style={{ color: '#ef4444' }}>{inspectedMonster.max_hp}</strong>
+            {/* Lado Esquerdo: Player */}
+            <div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--jade-accent)', fontWeight: 700 }}>
+                VOCÊ • Nv.{character.level}
+              </div>
+              <strong style={{ fontSize: '0.98rem', color: 'var(--text-main)' }}>
+                🧘 {character.name}
+              </strong>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                HP Atual: {character.hp}/{playerMaxHp}
+              </div>
             </div>
-            <div style={{ background: '#111827', padding: '0.55rem', borderRadius: '8px' }}>
-              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Ataque</div>
-              <strong style={{ color: '#f87171' }}>{inspectedMonster.attack}</strong>
+
+            {/* Centro: VS */}
+            <div
+              style={{
+                fontSize: '0.78rem',
+                fontWeight: 900,
+                padding: '0.25rem 0.55rem',
+                borderRadius: '999px',
+                background: 'rgba(212, 175, 55, 0.14)',
+                color: 'var(--gold-primary)',
+                border: '1px solid rgba(212, 175, 55, 0.35)',
+              }}
+            >
+              VS
             </div>
-            <div style={{ background: '#111827', padding: '0.55rem', borderRadius: '8px' }}>
-              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Defesa</div>
-              <strong style={{ color: '#60a5fa' }}>{inspectedMonster.defense}</strong>
+
+            {/* Lado Direito: Adversário */}
+            <div style={{ textAlign: 'right' }}>
+              <div
+                style={{
+                  fontSize: '0.72rem',
+                  color: inspectedMonster.is_boss ? '#fbbf24' : '#f87171',
+                  fontWeight: 700,
+                }}
+              >
+                {inspectedMonster.is_boss ? 'CHEFE' : 'ADVERSÁRIO'} • Nv.{inspectedMonster.recommended_level}
+              </div>
+              <strong
+                style={{
+                  fontSize: '0.98rem',
+                  color: inspectedMonster.is_boss ? '#fbbf24' : 'var(--text-main)',
+                }}
+              >
+                {inspectedMonster.is_boss ? '👑 ' : '👹 '}
+                {inspectedMonster.name}
+              </strong>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                Custo: {inspectedMonster.energy_cost}⚡
+              </div>
             </div>
-            <div style={{ background: '#111827', padding: '0.55rem', borderRadius: '8px' }}>
-              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Agilidade</div>
-              <strong style={{ color: '#34d399' }}>{inspectedMonster.agility}</strong>
-            </div>
+          </div>
+
+          {/* Tabela Comparativa: Esquerda (Player) | Centro (Atributo + Diferença) | Direita (Adversário) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginBottom: '0.85rem' }}>
+            {comparisonRows.map((row) => {
+              const diff = row.playerVal - row.mobVal;
+              const playerWins = diff > 0;
+              const tie = diff === 0;
+
+              return (
+                <div
+                  key={row.label}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1.2fr 1fr',
+                    alignItems: 'center',
+                    background: '#111827',
+                    padding: '0.5rem 0.7rem',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255,255,255,0.04)',
+                  }}
+                >
+                  {/* Valor Player (Esquerda) */}
+                  <div style={{ textAlign: 'left' }}>
+                    <strong
+                      style={{
+                        fontSize: '0.98rem',
+                        color: playerWins ? 'var(--jade-accent)' : tie ? '#e5e7eb' : '#9ca3af',
+                      }}
+                    >
+                      {row.playerVal}
+                    </strong>
+                  </div>
+
+                  {/* Rótulo + Badge de Diferença (Centro) */}
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                      {row.label}
+                    </div>
+                    <span
+                      style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        color: playerWins ? '#34d399' : tie ? '#9ca3af' : '#f87171',
+                      }}
+                    >
+                      {diff > 0 ? `+${diff} vantagem` : diff < 0 ? `${diff} desvantagem` : 'Empate'}
+                    </span>
+                  </div>
+
+                  {/* Valor Adversário (Direita) */}
+                  <div style={{ textAlign: 'right' }}>
+                    <strong
+                      style={{
+                        fontSize: '0.98rem',
+                        color: !playerWins && !tie ? '#f87171' : tie ? '#e5e7eb' : '#9ca3af',
+                      }}
+                    >
+                      {row.mobVal}
+                    </strong>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Indicador de Iniciativa */}
+          <div
+            style={{
+              fontSize: '0.75rem',
+              padding: '0.45rem 0.65rem',
+              borderRadius: '8px',
+              marginBottom: '0.8rem',
+              background: playerAttacksFirst ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+              border: playerAttacksFirst
+                ? '1px solid rgba(16, 185, 129, 0.3)'
+                : '1px solid rgba(239, 68, 68, 0.3)',
+              color: playerAttacksFirst ? '#6ee7b7' : '#fca5a5',
+            }}
+          >
+            {playerAttacksFirst
+              ? '⚡ Iniciativa sua: sua Agilidade garante o primeiro turno (15s).'
+              : `⚠️ Iniciativa do inimigo: ${inspectedMonster.name} é mais veloz e atacará primeiro em 3s!`}
           </div>
 
           {/* Bestiário e Recompensas */}

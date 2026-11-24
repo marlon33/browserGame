@@ -43,7 +43,10 @@ export function useInventory(characterId: number) {
       );
       return data;
     },
-    onSuccess: (data) => syncAfterAction(data.character),
+    onSuccess: (data) => {
+      queryClient.setQueryData(charQueryKey, data.character);
+      queryClient.invalidateQueries({ queryKey: invQueryKey });
+    },
   });
 
   const useItemMutation = useMutation({
@@ -53,7 +56,10 @@ export function useInventory(characterId: number) {
       );
       return data;
     },
-    onSuccess: (data) => syncAfterAction(data.character),
+    onSuccess: (data) => {
+      queryClient.setQueryData(charQueryKey, data.character);
+      queryClient.invalidateQueries({ queryKey: invQueryKey });
+    },
   });
 
   const sellMutation = useMutation({
@@ -63,7 +69,10 @@ export function useInventory(characterId: number) {
       );
       return data;
     },
-    onSuccess: (data) => syncAfterAction(data.character),
+    onSuccess: (data) => {
+      queryClient.setQueryData(charQueryKey, data.character);
+      queryClient.invalidateQueries({ queryKey: invQueryKey });
+    },
   });
 
   return {
