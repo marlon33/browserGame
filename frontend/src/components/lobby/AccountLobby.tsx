@@ -48,9 +48,18 @@ export function AccountLobby({ onEnterWorld }: AccountLobbyProps) {
 
   useEffect(() => {
     if (servers.length > 0 && selectedServerId === null) {
-      setSelectedServerId(servers[0].id);
+      const savedServerId = Number(localStorage.getItem('rpg_server_id'));
+      const hasSaved = servers.some((s) => s.id === savedServerId);
+
+      if (hasSaved) {
+        setSelectedServerId(savedServerId);
+      } else if (characters.length > 0) {
+        setSelectedServerId(characters[0].game_server_id);
+      } else {
+        setSelectedServerId(servers[0].id);
+      }
     }
-  }, [servers, selectedServerId]);
+  }, [servers, characters, selectedServerId]);
 
   useEffect(() => {
     if (realms.length > 0 && selectedRealmId === null) {
