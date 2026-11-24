@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useGameplay, type StatKey } from '@/hooks/useGameplay';
 import { useInventory } from '@/hooks/useInventory';
 import { getErrorMessage } from '@/utils/getErrorMessage';
@@ -48,6 +48,8 @@ export function CharacterHud({
   const [activeTab, setActiveTab] = useState<GameTab>('cultivate');
   const [bagFilter, setBagFilter] = useState<ItemFilter>('all');
   const [shopFilter, setShopFilter] = useState<ItemFilter>('all');
+  const [stonesBatch, setStonesBatch] = useState<number>(1);
+  const [cooldownLeft, setCooldownLeft] = useState<number>(0);
   const [toast, setToast] = useState<ToastData | null>(null);
   const [lastBattle, setLastBattle] = useState<HuntResult | null>(null);
 
@@ -74,6 +76,24 @@ export function CharacterHud({
     sellMutation,
   } = useInventory(character.id);
 
+  // Sincroniza cronômetro regressivo de cooldown da meditação
+  useEffect(() => {
+    const until = character.meditation_status?.cooldown_until;
+    if (!until) {
+      setCooldownLeft(0);
+      return;
+    }
+
+    const updateTimer = () => {
+      const diff = Math.max(0, Math.ceil((new Date(until).getTime() - Date.now()) / 1000));
+      setCooldownLeft(diff);
+    };
+
+    updateTimer();
+    const timer = setInterval(updateTimer, 1000);
+    return () => clearInterval(timer);
+  }, [character.meditation_status?.cooldown_until]);
+
   const eff = character.effective_stats;
   const combat = character.combat_summary;
   const displayMaxHp = eff?.max_hp ?? character.max_hp;
@@ -85,16 +105,49 @@ export function CharacterHud({
   const xpRequired = character.next_level_xp ?? Math.round(100 * Math.pow(character.level, 1.45));
   const xpPercent = Math.min(100, Math.round((character.experience / Math.max(1, xpRequired)) * 100));
 
+  // Progresso da Patente (Qi de Cultivo)
+  const currentRankBase = character.cultivation_rank?.required_xp ?? 0;
+  const nextRankTarget = character.next_rank_info?.required_xp ?? null;
+  const cultivationXp = character.cultivation_xp ?? 0;
+  const rankProgressPct = nextRankTarget
+    ? Math.min(
+        100,
+        Math.max(
+          0,
+          Math.round(
+            ((cultivationXp - currentRankBase) / Math.max(1, nextRankTarget - currentRankBase)) * 100
+          )
+        )
+      )
+    : 100;
+
+  // Cálculos de pré-visualização da Meditação
+  const fatiguePct = character.meditation_status?.fatigue_pct ?? 0;
+  const efficiencyPct = character.meditation_status?.efficiency_pct ?? 100;
+  const isSaturated = character.meditation_status?.is_saturated ?? false;
+
+  const previewEnergyCost = 4 + stonesBatch * 2 + Math.floor(character.level * 0.5);
+  const previewCooldownSec = stonesBatch * 5 + character.level * 2;
+  const xpMult = character.server?.xp_multiplier ?? 1.0;
+  const previewQiGain = Math.max(
+    5,
+    Math.round(stonesBatch * (32 + character.level * 4) * (efficiencyPct / 100) * xpMult)
+  );
+
+  const canMeditate =
+    cooldownLeft === 0 &&
+    !isSaturated &&
+    character.spirit_stones >= stonesBatch &&
+    character.energy >= previewEnergyCost;
+
   const realmColor = character.realm?.primary_color || '#d4af37';
   const rankColor = character.cultivation_rank?.badge_color || '#cd7f32';
 
-  // Atalho rápido de poção de cura na mochila
   const healingPotionEntry = useMemo(
     () => inventory.find((i) => i.item.type === 'consumable' && i.item.heal_hp > 0 && i.quantity > 0),
     [inventory]
   );
 
-  // Slots equipados (Paper Doll)
   const equippedSlots = useMemo(() => {
     const weapon = inventory.find((i) => i.is_equipped && i.item.type === 'weapon');
     const armor = inventory.find((i) => i.is_equipped && i.item.type === 'armor');
@@ -117,11 +170,12 @@ export function CharacterHud({
   );
 
   const handleMeditate = () => {
-    meditateMutation.mutate(undefined, {
+    meditateMutation.mutate(stonesBatch, {
       onSuccess: (data) => {
         let msg = data.message;
-        if (data.levels_gained > 0) msg += ` 🎉 Nível ${data.character.level}!`;
-        if (data.rank_up_title) msg += ` ⚡ Patente: ${data.rank_up_title}!`;
+        if (data.rank_up_title) {
+          msg = `⚡ Ascensão de Patente! Você alcançou ${data.rank_up_title}!`;
+        }
         showToast('success', msg);
       },
       onError: (err) => showToast('error', getErrorMessage(err)),
@@ -142,12 +196,10 @@ export function CharacterHud({
     huntMutation.mutate(monsterId, {
       onSuccess: (result) => {
         setLastBattle(result);
-        if (result.rank_up_title) {
-          showToast('success', `⚡ Ascensão Espiritual! Você alcançou ${result.rank_up_title}!`);
-        } else if (result.levels_gained > 0) {
+        if (result.levels_gained > 0) {
           showToast('success', `🎉 Vitória! Você avançou para o Nível ${result.character.level}!`);
         } else if (result.outcome === 'victory') {
-          showToast('success', `🏆 Vitória! +${result.xp_gained} XP e +${result.spirit_stones_gained} Pedras.`);
+          showToast('success', `🏆 Vitória! +${result.xp_gained} XP de Combate e +${result.spirit_stones_gained} Pedras.`);
         } else {
           showToast('error', '💀 Você foi derrotado! Recupere seu HP antes de caçar novamente.');
         }
@@ -338,10 +390,10 @@ export function CharacterHud({
             </div>
           </div>
 
-          {/* XP */}
-          <div style={{ marginBottom: '1rem' }}>
+          {/* XP de Nível (Combate) */}
+          <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
-              <span>Experiência (XP)</span>
+              <span>XP de Nível (Combate)</span>
               <strong>
                 {character.experience.toLocaleString('pt-BR')} / {xpRequired.toLocaleString('pt-BR')}
               </strong>
@@ -352,6 +404,27 @@ export function CharacterHud({
                   width: `${xpPercent}%`,
                   height: '100%',
                   background: 'linear-gradient(90deg, #ca8a04, #eab308)',
+                  transition: 'width 0.3s ease',
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Qi de Cultivo (Patente do Reino) */}
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
+              <span style={{ color: '#c084fc' }}>Qi de Patente ({character.cultivation_rank?.title})</span>
+              <strong>
+                {cultivationXp.toLocaleString('pt-BR')}
+                {nextRankTarget ? ` / ${nextRankTarget.toLocaleString('pt-BR')}` : ' (MÁX)'}
+              </strong>
+            </div>
+            <div style={{ height: '8px', background: 'var(--bg-void)', borderRadius: '999px', overflow: 'hidden' }}>
+              <div
+                style={{
+                  width: `${rankProgressPct}%`,
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #7e22ce, #c084fc)',
                   transition: 'width 0.3s ease',
                 }}
               />
@@ -538,39 +611,129 @@ export function CharacterHud({
             </button>
           </div>
 
-          {/* ABA 1: CULTIVO */}
+          {/* ABA 1: CULTIVO DE PATENTE (REFINO DE PEDRAS + COOLDOWN + FADIGA) */}
           {activeTab === 'cultivate' && (
             <div className="form-stack">
-              <h3 style={{ fontSize: '1.15rem' }}>Câmara de Cultivo Espiritual</h3>
-              <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                Absorva o Qi celestial para ganhar experiência segura, coletar Pedras Espirituais e restaurar <strong>35% do HP</strong>.
+              <h3 style={{ fontSize: '1.15rem' }}>Câmara de Refino Espiritual</h3>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                Refine <strong>Pedras Espirituais</strong> para absorver <strong>Qi de Cultivo</strong> e ascender sua{' '}
+                <strong>Patente do Reino</strong> (multiplicador de atributos). O nível de combate evolui apenas na Caça.
               </p>
 
+              {/* Barra de Fadiga Espiritual */}
               <div
                 style={{
                   background: 'var(--bg-void)',
-                  padding: '0.9rem',
+                  padding: '0.8rem',
                   borderRadius: '10px',
-                  fontSize: '0.84rem',
-                  display: 'flex',
-                  justifyContent: 'space-between',
+                  border: isSaturated
+                    ? '1px solid rgba(239, 68, 68, 0.5)'
+                    : '1px solid rgba(255,255,255,0.06)',
                 }}
               >
-                <span>Custo de Energia:</span>
-                <strong style={{ color: '#38bdf8' }}>10 Energia</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.3rem' }}>
+                  <span>Fadiga Mental (-1% / 2min)</span>
+                  <strong style={{ color: fatiguePct >= 70 ? '#f87171' : '#c084fc' }}>
+                    {fatiguePct}% (Eficiência {efficiencyPct}%)
+                  </strong>
+                </div>
+                <div style={{ height: '7px', background: '#111827', borderRadius: '999px', overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      width: `${fatiguePct}%`,
+                      height: '100%',
+                      background:
+                        fatiguePct >= 85
+                          ? '#ef4444'
+                          : fatiguePct >= 50
+                          ? '#f59e0b'
+                          : '#a855f7',
+                      transition: 'width 0.3s ease',
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Seletor de Lote de Pedras */}
+              <div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
+                  Quantidade de Pedras para Refinar:
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem' }}>
+                  {[1, 3, 5, 10].map((qty) => {
+                    const selected = stonesBatch === qty;
+                    return (
+                      <button
+                        key={qty}
+                        type="button"
+                        onClick={() => setStonesBatch(qty)}
+                        style={{
+                          padding: '0.45rem 0.25rem',
+                          borderRadius: '8px',
+                          border: selected
+                            ? '1px solid var(--gold-primary)'
+                            : '1px solid rgba(255,255,255,0.1)',
+                          background: selected ? 'rgba(212, 175, 55, 0.16)' : 'var(--bg-void)',
+                          color: selected ? 'var(--gold-primary)' : 'var(--text-main)',
+                          fontWeight: 700,
+                          fontSize: '0.8rem',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {qty} {qty === 1 ? 'Pedra' : 'Pedras'}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Resumo de Custo vs Retorno */}
+              <div
+                style={{
+                  background: 'var(--bg-void)',
+                  padding: '0.85rem',
+                  borderRadius: '10px',
+                  fontSize: '0.8rem',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '0.45rem',
+                }}
+              >
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Custo Pedras: </span>
+                  <strong style={{ color: 'var(--gold-primary)' }}>{stonesBatch}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Custo Energia: </span>
+                  <strong style={{ color: '#38bdf8' }}>{previewEnergyCost}⚡</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Cooldown: </span>
+                  <strong>{previewCooldownSec}s</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Ganho Qi: </span>
+                  <strong style={{ color: '#c084fc' }}>+{previewQiGain} Qi</strong>
+                </div>
               </div>
 
               <button
                 type="button"
                 className="btn-primary"
-                disabled={meditateMutation.isPending || character.energy < 10}
+                disabled={meditateMutation.isPending || !canMeditate}
                 onClick={handleMeditate}
               >
                 {meditateMutation.isPending
-                  ? 'Canalizando Qi...'
-                  : character.energy < 10
-                  ? 'Energia Insuficiente (10)'
-                  : 'Meditar Agora (-10 Energia)'}
+                  ? 'Refinando Pedras Espirituais...'
+                  : cooldownLeft > 0
+                  ? `Estabilizando Meridianos (${cooldownLeft}s)`
+                  : isSaturated
+                  ? 'Fadiga Crítica (Aguarde Descanso)'
+                  : character.spirit_stones < stonesBatch
+                  ? `Pedras Insuficientes (${stonesBatch})`
+                  : character.energy < previewEnergyCost
+                  ? `Energia Insuficiente (${previewEnergyCost}⚡)`
+                  : `Meditar & Refinar (-${stonesBatch} Pedras | -${previewEnergyCost}⚡)`}
               </button>
 
               {battleHistory.length > 0 && (
@@ -645,7 +808,6 @@ export function CharacterHud({
                           {monster.zone_name} • HP {monster.max_hp} • ATQ {monster.attack} • DEF {monster.defense}
                         </div>
 
-                        {/* Drops possíveis */}
                         {monster.drops && monster.drops.length > 0 && (
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.45rem' }}>
                             {monster.drops.map((d) =>
@@ -772,12 +934,11 @@ export function CharacterHud({
             </div>
           )}
 
-          {/* ABA 3: MOCHILA COM SLOTS EQUIPADOS (PAPER DOLL) & FILTROS */}
+          {/* ABA 3: MOCHILA COM SLOTS EQUIPADOS & FILTROS */}
           {activeTab === 'bag' && (
             <div className="form-stack">
               <h3 style={{ fontSize: '1.15rem' }}>Equipamentos Ativos</h3>
 
-              {/* Paper Doll: 3 Slots */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
                 {equippedSlots.map(({ slot, label, equipped }) => (
                   <div
@@ -839,7 +1000,6 @@ export function CharacterHud({
                 ))}
               </div>
 
-              {/* Filtros da Mochila */}
               <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
                 {filterOptions.map((f) => (
                   <button
@@ -983,7 +1143,7 @@ export function CharacterHud({
             </div>
           )}
 
-          {/* ABA 4: MERCADO COM FILTROS & COMPRA EM LOTE PARA PÍLULAS */}
+          {/* ABA 4: MERCADO COM FILTROS & COMPRA EM LOTE */}
           {activeTab === 'shop' && (
             <div className="form-stack">
               <h3 style={{ fontSize: '1.15rem' }}>Pavilhão de Tesouros</h3>

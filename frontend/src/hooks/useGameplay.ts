@@ -29,15 +29,17 @@ export function useGameplay(characterId: number) {
   });
 
   const meditateMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (stones: number = 1) => {
       const { data } = await api.post<{
         message: string;
-        xp_gained: number;
-        spirit_stones_gained: number;
-        levels_gained: number;
+        qi_gained: number;
+        stones_spent: number;
+        energy_spent: number;
+        cooldown_seconds: number;
+        efficiency_pct: number;
         rank_up_title: string | null;
         character: Character;
-      }>('/gameplay/meditate');
+      }>('/gameplay/meditate', { stones });
       return data;
     },
     onSuccess: (data) => {

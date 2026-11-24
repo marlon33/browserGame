@@ -16,11 +16,15 @@ class Character extends Model
         'name',
         'level',
         'experience',
+        'cultivation_xp',
         'hp',
         'max_hp',
         'energy',
         'max_energy',
         'last_energy_sync_at',
+        'meditation_cooldown_until',
+        'meditation_fatigue',
+        'last_fatigue_sync_at',
         'spirit_stones',
         'jade_tokens',
         'strength',
@@ -35,12 +39,16 @@ class Character extends Model
         'effective_stats',
         'combat_summary',
         'next_level_xp',
+        'next_rank_info',
+        'meditation_status',
     ];
 
     protected function casts(): array
     {
         return [
             'last_energy_sync_at' => 'datetime',
+            'meditation_cooldown_until' => 'datetime',
+            'last_fatigue_sync_at' => 'datetime',
             'last_active_at' => 'datetime',
         ];
     }
@@ -78,6 +86,47 @@ class Character extends Model
     public function getNextLevelXpAttribute(): int
     {
         return $this->xpForNextLevel();
+    }
+
+    public function getNextRankInfoAttribute(): ?array
+    {
+        if (! $this->cultivationRank) {
+            return null;
+        }
+
+        $nextRank = CultivationRank::where('tier_order', '>', $this->cultivationRank->tier_order)
+            ->orderBy('tier_order')
+            ->first();
+
+        if (! $nextRank) {
+            return null;
+        }
+
+        return [
+            'id' => $nextRank->id,
+            'title' => $nextRank->title,
+            'required_xp' => $nextRank->required_xp,
+            'stat_multiplier' => $nextRank->stat_multiplier,
+        ];
+    }
+
+    public function getMeditationStatusAttribute(): array
+    {
+        $remainingSeconds = 0;
+        if ($this->meditation_cooldown_until && $this->meditation_cooldown_until->isFuture()) {
+            $remainingSeconds = (int) now()->diffInSeconds($this->meditation_cooldown_until);
+        }
+
+        $fatigue = (int) ($this->meditation_fatigue ?? 0);
+        $efficiencyPct = max(20, 100 - $fatigue);
+
+        return [
+            'cooldown_remaining_seconds' => $remainingSeconds,
+            'cooldown_until' => $this->meditation_cooldown_until?->toIso8601String(),
+            'fatigue_pct' => $fatigue,
+            'efficiency_pct' => $efficiencyPct,
+            'is_saturated' => $fatigue >= 85,
+        ];
     }
 
     /**
@@ -144,31 +193,54 @@ class Character extends Model
     }
 
     /**
-     * Sincronização Lazy de Energia (+1 a cada 3 minutos)
+     * Sincronização Lazy de Energia (+1 a cada 3min) e Fadiga de Meditação (-1% a cada 2min)
      */
     public function syncLazyResources(): void
     {
+        $dirty = false;
+
+        // 1. Energia
         if ($this->energy >= $this->max_energy) {
             if ($this->last_energy_sync_at === null || $this->last_energy_sync_at->diffInMinutes(now()) >= 3) {
                 $this->last_energy_sync_at = now();
-                $this->saveQuietly();
+                $dirty = true;
             }
-            return;
+        } else {
+            $lastSync = $this->last_energy_sync_at ?? now();
+            $minutesElapsed = (int) $lastSync->diffInMinutes(now());
+            $regenInterval = 3;
+
+            if ($minutesElapsed >= $regenInterval) {
+                $pointsGained = intdiv($minutesElapsed, $regenInterval);
+                $newEnergy = min($this->max_energy, $this->energy + $pointsGained);
+
+                $this->energy = $newEnergy;
+                $this->last_energy_sync_at = $newEnergy >= $this->max_energy
+                    ? now()
+                    : $lastSync->addMinutes($pointsGained * $regenInterval);
+                $dirty = true;
+            }
         }
 
-        $lastSync = $this->last_energy_sync_at ?? now();
-        $minutesElapsed = (int) $lastSync->diffInMinutes(now());
-        $regenInterval = 3;
+        // 2. Fadiga de Meditação (-1% a cada 2 minutos)
+        if ($this->meditation_fatigue > 0) {
+            $lastFatigueSync = $this->last_fatigue_sync_at ?? now();
+            $fatigueMinutes = (int) $lastFatigueSync->diffInMinutes(now());
 
-        if ($minutesElapsed >= $regenInterval) {
-            $pointsGained = intdiv($minutesElapsed, $regenInterval);
-            $newEnergy = min($this->max_energy, $this->energy + $pointsGained);
+            if ($fatigueMinutes >= 2) {
+                $recovered = intdiv($fatigueMinutes, 2);
+                $this->meditation_fatigue = max(0, $this->meditation_fatigue - $recovered);
+                $this->last_fatigue_sync_at = $this->meditation_fatigue === 0
+                    ? now()
+                    : $lastFatigueSync->addMinutes($recovered * 2);
+                $dirty = true;
+            }
+        } elseif ($this->last_fatigue_sync_at === null) {
+            $this->last_fatigue_sync_at = now();
+            $dirty = true;
+        }
 
-            $this->energy = $newEnergy;
-            $this->last_energy_sync_at = $newEnergy >= $this->max_energy
-                ? now()
-                : $lastSync->addMinutes($pointsGained * $regenInterval);
-
+        if ($dirty) {
             $this->saveQuietly();
         }
     }
@@ -178,11 +250,13 @@ class Character extends Model
         return (int) round(100 * pow($this->level, 1.45));
     }
 
+    /**
+     * XP de Combate (Combate PvE) -> Sobe exclusivamente o Nível do Personagem
+     */
     public function grantExperience(int $amount): array
     {
         $this->experience += max(0, $amount);
         $levelsGained = 0;
-        $rankUpTitle = null;
 
         while ($this->experience >= $this->xpForNextLevel()) {
             $this->experience -= $this->xpForNextLevel();
@@ -193,9 +267,22 @@ class Character extends Model
             $levelsGained++;
         }
 
-        $totalProgressionScore = $this->experience + ($this->level - 1) * 150;
+        return [
+            'levels_gained' => $levelsGained,
+            'rank_up_title' => null,
+        ];
+    }
+
+    /**
+     * Qi de Cultivo (Meditação) -> Sobe exclusivamente a Patente do Reino
+     */
+    public function grantCultivationXp(int $amount): ?string
+    {
+        $this->cultivation_xp += max(0, $amount);
+        $rankUpTitle = null;
+
         $nextRank = CultivationRank::where('tier_order', '>', $this->cultivationRank->tier_order)
-            ->where('required_xp', '<=', $totalProgressionScore)
+            ->where('required_xp', '<=', $this->cultivation_xp)
             ->orderByDesc('tier_order')
             ->first();
 
@@ -208,10 +295,7 @@ class Character extends Model
             $rankUpTitle = $nextRank->title;
         }
 
-        return [
-            'levels_gained' => $levelsGained,
-            'rank_up_title' => $rankUpTitle,
-        ];
+        return $rankUpTitle;
     }
 
     public function addItemToInventory(Item $item, int $quantity = 1): CharacterItem

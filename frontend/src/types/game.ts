@@ -32,6 +32,21 @@ export interface CultivationRank {
   bonus_max_energy: number;
 }
 
+export interface NextRankInfo {
+  id: number;
+  title: string;
+  required_xp: number;
+  stat_multiplier: number;
+}
+
+export interface MeditationStatus {
+  cooldown_remaining_seconds: number;
+  cooldown_until: string | null;
+  fatigue_pct: number;
+  efficiency_pct: number;
+  is_saturated: boolean;
+}
+
 export interface EffectiveStats {
   strength: number;
   agility: number;
@@ -61,7 +76,10 @@ export interface Character {
   name: string;
   level: number;
   experience: number;
+  cultivation_xp: number;
   next_level_xp?: number;
+  next_rank_info?: NextRankInfo | null;
+  meditation_status?: MeditationStatus;
   hp: number;
   max_hp: number;
   energy: number;

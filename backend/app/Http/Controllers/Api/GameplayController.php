@@ -35,9 +35,6 @@ class GameplayController extends Controller
         return $character;
     }
 
-    /**
-     * Lista monstros disponíveis com tabela de drops (transparência de farming)
-     */
     public function monsters(): JsonResponse
     {
         $monsters = Monster::with(['drops.item:id,name,rarity,type'])
@@ -49,9 +46,6 @@ class GameplayController extends Controller
         ]);
     }
 
-    /**
-     * Histórico das últimas 10 batalhas do personagem
-     */
     public function battleHistory(Request $request): JsonResponse
     {
         $character = $this->resolveCharacter($request);
@@ -68,14 +62,23 @@ class GameplayController extends Controller
     }
 
     /**
-     * Treino de Meditação Espiritual
+     * Meditação de Refino Espiritual:
+     * - Consome Pedras Espirituais (stones_spent: 1..25)
+     * - Consome Energia escalável: 4 + (pedras * 2) + floor(nível * 0.5)
+     * - Aplica Cooldown escalável: (pedras * 5s) + (nível * 2s)
+     * - Acumula Fadiga de Meditação (+12% + pedras * 2%), reduzindo eficiência
+     * - Concede exclusivamente Qi de Cultivo (cultivation_xp) para Patente + cura HP
      */
     public function meditate(Request $request): JsonResponse
     {
-        $character = $this->resolveCharacter($request);
-        $energyCost = 10;
+        $validated = $request->validate([
+            'stones' => ['nullable', 'integer', 'min:1', 'max:25'],
+        ]);
 
-        return DB::transaction(function () use ($character, $energyCost) {
+        $stonesToSpend = $validated['stones'] ?? 1;
+        $character = $this->resolveCharacter($request);
+
+        return DB::transaction(function () use ($character, $stonesToSpend) {
             /** @var Character $char */
             $char = Character::with(['server', 'realm', 'cultivationRank'])
                 ->where('id', $character->id)
@@ -84,44 +87,81 @@ class GameplayController extends Controller
 
             $char->syncLazyResources();
 
-            if ($char->energy < $energyCost) {
+            // 1. Verifica Cooldown
+            if ($char->meditation_cooldown_until && $char->meditation_cooldown_until->isFuture()) {
+                $secs = (int) now()->diffInSeconds($char->meditation_cooldown_until);
                 throw ValidationException::withMessages([
-                    'energy' => ["Você precisa de {$energyCost} de energia para meditar (atual: {$char->energy})."],
+                    'cooldown' => ["Seus meridianos estão estabilizando. Aguarde {$secs}s para meditar novamente."],
                 ]);
             }
 
-            $char->energy -= $energyCost;
+            // 2. Verifica Saturação por Fadiga
+            if ($char->meditation_fatigue >= 85) {
+                throw ValidationException::withMessages([
+                    'fatigue' => ["Fadiga espiritual crítica ({$char->meditation_fatigue}%). Aguarde sua mente descansar antes de refinar mais Qi."],
+                ]);
+            }
 
+            // 3. Calcula custos escaláveis por pedras + nível
+            $energyCost = 4 + ($stonesToSpend * 2) + (int) floor($char->level * 0.5);
+            $cooldownSeconds = ($stonesToSpend * 5) + ($char->level * 2);
+
+            if ($char->spirit_stones < $stonesToSpend) {
+                throw ValidationException::withMessages([
+                    'spirit_stones' => ["Pedras Espirituais insuficientes (necessário: {$stonesToSpend}, atual: {$char->spirit_stones})."],
+                ]);
+            }
+
+            if ($char->energy < $energyCost) {
+                throw ValidationException::withMessages([
+                    'energy' => ["Energia insuficiente para refinar {$stonesToSpend} pedra(s) no Nv.{$char->level} (necessário: {$energyCost}, atual: {$char->energy})."],
+                ]);
+            }
+
+            // 4. Calcula eficiência com base na fadiga atual
+            $efficiencyPct = max(20, 100 - (int) $char->meditation_fatigue);
+            $xpMult = $char->server->xp_multiplier ?? 1.0;
+
+            $rawQi = $stonesToSpend * (32 + ($char->level * 4));
+            $qiGained = max(5, (int) round($rawQi * ($efficiencyPct / 100) * $xpMult));
+
+            // 5. Deduz recursos e aplica cooldown + fadiga
+            $char->spirit_stones -= $stonesToSpend;
+            $char->energy -= $energyCost;
+            $char->meditation_cooldown_until = now()->addSeconds($cooldownSeconds);
+
+            $fatigueGain = 12 + ($stonesToSpend * 2);
+            $char->meditation_fatigue = min(100, (int) $char->meditation_fatigue + $fatigueGain);
+            if ($char->last_fatigue_sync_at === null) {
+                $char->last_fatigue_sync_at = now();
+            }
+
+            // Cura proporcional ao lote refinado (20% + 3% por pedra, máx 50%)
             $effectiveMaxHp = $char->effective_stats['max_hp'];
-            $healedHp = (int) round($effectiveMaxHp * 0.35);
+            $healPct = min(0.50, 0.20 + ($stonesToSpend * 0.03));
+            $healedHp = (int) round($effectiveMaxHp * $healPct);
             $char->hp = min($effectiveMaxHp, $char->hp + $healedHp);
 
-            $xpMult = $char->server->xp_multiplier ?? 1.0;
-            $baseXp = 35 + ($char->level * 12);
-            $xpGained = (int) round($baseXp * $xpMult);
-            $stonesGained = 15 + ($char->level * 4);
-
-            $char->spirit_stones += $stonesGained;
-            $progression = $char->grantExperience($xpGained);
+            // Concede Qi de Cultivo (Patente) - NÃO mexe no level!
+            $rankUpTitle = $char->grantCultivationXp($qiGained);
             $char->last_active_at = now();
             $char->save();
 
             $char->load(['server', 'realm', 'cultivationRank']);
 
             return response()->json([
-                'message' => "Meditação concluída! +{$xpGained} XP, +{$stonesGained} Pedras Espirituais e HP restaurado.",
-                'xp_gained' => $xpGained,
-                'spirit_stones_gained' => $stonesGained,
-                'levels_gained' => $progression['levels_gained'],
-                'rank_up_title' => $progression['rank_up_title'],
+                'message' => "Refino concluído ({$efficiencyPct}% eficiência): +{$qiGained} Qi de Cultivo e +{$healedHp} HP!",
+                'qi_gained' => $qiGained,
+                'stones_spent' => $stonesToSpend,
+                'energy_spent' => $energyCost,
+                'cooldown_seconds' => $cooldownSeconds,
+                'efficiency_pct' => $efficiencyPct,
+                'rank_up_title' => $rankUpTitle,
                 'character' => $char,
             ]);
         });
     }
 
-    /**
-     * Distribui pontos de atributo (+1 ou +5)
-     */
     public function allocateStat(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -164,9 +204,6 @@ class GameplayController extends Controller
         });
     }
 
-    /**
-     * Inicia caça PvE
-     */
     public function hunt(Request $request, CombatEngineService $combatEngine): JsonResponse
     {
         $validated = $request->validate([
