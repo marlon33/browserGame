@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useGameplay, type StatKey } from '@/hooks/useGameplay';
 import { useInventory } from '@/hooks/useInventory';
+import { useQuests } from '@/hooks/useQuests';
 import { getErrorMessage } from '@/utils/getErrorMessage';
 import { Toast, type ToastData } from '@/components/ui/Toast';
 import { HuntArena } from '@/components/game/HuntArena';
+import { QuestsPanel } from '@/components/game/QuestsPanel';
 import type { Character, HuntResult, Item, TacticalActionType } from '@/types/game';
 
 interface CharacterHudProps {
@@ -12,7 +15,7 @@ interface CharacterHudProps {
   onLogout: () => void;
 }
 
-type GameTab = 'cultivate' | 'hunt' | 'bag' | 'shop';
+type GameTab = 'cultivate' | 'hunt' | 'quests' | 'bag' | 'shop';
 type ItemFilter = 'all' | 'weapon' | 'armor' | 'accessory' | 'consumable';
 
 const RARITY_COLORS: Record<Item['rarity'], string> = {
@@ -46,7 +49,9 @@ export function CharacterHud({
   onSwitchCharacter,
   onLogout,
 }: CharacterHudProps) {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<GameTab>('cultivate');
+  const [targetRegionSlug, setTargetRegionSlug] = useState<string | null>(null);
   const [bagFilter, setBagFilter] = useState<ItemFilter>('all');
   const [shopFilter, setShopFilter] = useState<ItemFilter>('all');
   const [stonesBatch, setStonesBatch] = useState<number>(1);
@@ -71,7 +76,14 @@ export function CharacterHud({
     tacticalMonsterTurnMutation,
   } = useGameplay(character.id);
 
-  // Se houver uma batalha ativa ao carregar a página, abre direto na aba Caça
+  const {
+    quests,
+    claimableCount,
+    isLoadingQuests,
+    visitRegionMutation,
+    claimRewardMutation,
+  } = useQuests(character.id);
+
   useEffect(() => {
     if (activeBattle && activeBattle.status === 'active') {
       setActiveTab('hunt');
@@ -178,6 +190,10 @@ export function CharacterHud({
     [shopItems, shopFilter]
   );
 
+  const refreshQuests = () => {
+    queryClient.invalidateQueries({ queryKey: ['quests', String(character.id)] });
+  };
+
   const handleMeditate = () => {
     meditateMutation.mutate(stonesBatch, {
       onSuccess: (data) => {
@@ -207,6 +223,7 @@ export function CharacterHud({
       {
         onSuccess: (result) => {
           setLastBattle(result);
+          refreshQuests();
           if (result.levels_gained > 0) {
             showToast('success', `🎉 Vitória! Você avançou para o Nível ${result.character.level}!`);
           } else if (result.outcome === 'victory') {
@@ -225,6 +242,7 @@ export function CharacterHud({
 
   const handleStartTacticalBattle = (monsterId: number) => {
     startBattleMutation.mutate(monsterId, {
+      onSuccess: () => refreshQuests(),
       onError: (err) => showToast('error', getErrorMessage(err)),
     });
   };
@@ -236,6 +254,7 @@ export function CharacterHud({
         onSuccess: ({ battle, character: updatedChar }) => {
           if (battle.status === 'victory' && battle.rewards_summary) {
             const rw = battle.rewards_summary;
+            refreshQuests();
             setLastBattle({
               outcome: 'victory',
               fights_completed: 1,
@@ -383,7 +402,6 @@ export function CharacterHud({
       </header>
 
       <main className="lobby-content">
-        {/* COLUNA 1: FICHA VITAL, STATUS DERIVADOS & ATRIBUTOS */}
         <section className="auth-card" style={{ maxWidth: '100%' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
             <span
@@ -402,7 +420,6 @@ export function CharacterHud({
             </span>
           </div>
 
-          {/* HP + Botão de Cura Rápida */}
           <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
               <span>Vitalidade (HP)</span>
@@ -449,7 +466,6 @@ export function CharacterHud({
             </div>
           </div>
 
-          {/* Energia */}
           <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
               <span>Energia (+1 / 3min)</span>
@@ -469,7 +485,6 @@ export function CharacterHud({
             </div>
           </div>
 
-          {/* XP de Nível (Combate) */}
           <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
               <span>XP de Nível (Combate)</span>
@@ -489,7 +504,6 @@ export function CharacterHud({
             </div>
           </div>
 
-          {/* Qi de Cultivo (Patente do Reino) */}
           <div style={{ marginBottom: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
               <span style={{ color: '#c084fc' }}>Qi de Patente ({character.cultivation_rank?.title})</span>
@@ -510,7 +524,6 @@ export function CharacterHud({
             </div>
           </div>
 
-          {/* Status Derivados de Combate */}
           {combat && (
             <div
               style={{
@@ -539,7 +552,6 @@ export function CharacterHud({
             </div>
           )}
 
-          {/* Moedas */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '1.1rem' }}>
             <div style={{ background: 'var(--bg-void)', padding: '0.65rem', borderRadius: '10px' }}>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Pedras Espirituais</div>
@@ -555,7 +567,6 @@ export function CharacterHud({
             </div>
           </div>
 
-          {/* Atributos & Alocação (+1 / +5) */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
             <h3 style={{ fontSize: '1rem' }}>Atributos</h3>
             {character.stat_points > 0 && (
@@ -641,19 +652,18 @@ export function CharacterHud({
           </div>
         </section>
 
-        {/* COLUNA 2: ABAS DO MUNDO */}
         <section className="auth-card" style={{ maxWidth: '100%' }}>
           <div
             className="auth-tabs"
             role="tablist"
-            style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.2rem' }}
+            style={{ gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.2rem' }}
           >
             <button
               type="button"
               role="tab"
               aria-selected={activeTab === 'cultivate'}
               className={`auth-tab ${activeTab === 'cultivate' ? 'active' : ''}`}
-              style={{ fontSize: '0.8rem', padding: '0 0.25rem' }}
+              style={{ fontSize: '0.76rem', padding: '0 0.2rem' }}
               onClick={() => setActiveTab('cultivate')}
             >
               🧘 Cultivo
@@ -663,7 +673,7 @@ export function CharacterHud({
               role="tab"
               aria-selected={activeTab === 'hunt'}
               className={`auth-tab ${activeTab === 'hunt' ? 'active' : ''}`}
-              style={{ fontSize: '0.8rem', padding: '0 0.25rem' }}
+              style={{ fontSize: '0.76rem', padding: '0 0.2rem' }}
               onClick={() => setActiveTab('hunt')}
             >
               ⚔️ Caça
@@ -671,9 +681,22 @@ export function CharacterHud({
             <button
               type="button"
               role="tab"
+              aria-selected={activeTab === 'quests'}
+              className={`auth-tab ${activeTab === 'quests' ? 'active' : ''}`}
+              style={{ fontSize: '0.76rem', padding: '0 0.2rem' }}
+              onClick={() => {
+                setActiveTab('quests');
+                refreshQuests();
+              }}
+            >
+              📜 Missões {claimableCount > 0 ? `(${claimableCount})` : ''}
+            </button>
+            <button
+              type="button"
+              role="tab"
               aria-selected={activeTab === 'bag'}
               className={`auth-tab ${activeTab === 'bag' ? 'active' : ''}`}
-              style={{ fontSize: '0.8rem', padding: '0 0.25rem' }}
+              style={{ fontSize: '0.76rem', padding: '0 0.2rem' }}
               onClick={() => setActiveTab('bag')}
             >
               🎒 Mochila ({inventory.length})
@@ -683,14 +706,13 @@ export function CharacterHud({
               role="tab"
               aria-selected={activeTab === 'shop'}
               className={`auth-tab ${activeTab === 'shop' ? 'active' : ''}`}
-              style={{ fontSize: '0.8rem', padding: '0 0.25rem' }}
+              style={{ fontSize: '0.76rem', padding: '0 0.2rem' }}
               onClick={() => setActiveTab('shop')}
             >
               🏛️ Mercado
             </button>
           </div>
 
-          {/* ABA 1: CULTIVO DE PATENTE */}
           {activeTab === 'cultivate' && (
             <div className="form-stack">
               <h3 style={{ fontSize: '1.15rem' }}>Câmara de Refino Espiritual</h3>
@@ -844,7 +866,6 @@ export function CharacterHud({
             </div>
           )}
 
-          {/* ABA 2: ARENA DE COMBATE TÁTICO */}
           {activeTab === 'hunt' && (
             <HuntArena
               character={character}
@@ -857,6 +878,8 @@ export function CharacterHud({
               isExecutingAction={
                 tacticalActionMutation.isPending || tacticalMonsterTurnMutation.isPending
               }
+              initialRegionSlug={targetRegionSlug}
+              onSelectRegion={(slug) => visitRegionMutation.mutate(slug)}
               onStartTacticalBattle={handleStartTacticalBattle}
               onTacticalAction={handleTacticalAction}
               onTacticalMonsterTurn={handleTacticalMonsterTurn}
@@ -864,7 +887,24 @@ export function CharacterHud({
             />
           )}
 
-          {/* ABA 3: MOCHILA */}
+          {activeTab === 'quests' && (
+            <QuestsPanel
+              quests={quests}
+              isLoading={isLoadingQuests}
+              isClaiming={claimRewardMutation.isPending}
+              onClaim={(characterQuestId) => {
+                claimRewardMutation.mutate(characterQuestId, {
+                  onSuccess: (data) => showToast('success', data.message),
+                  onError: (err) => showToast('error', getErrorMessage(err)),
+                });
+              }}
+              onGoToHuntRegion={(regionSlug) => {
+                setTargetRegionSlug(regionSlug);
+                setActiveTab('hunt');
+              }}
+            />
+          )}
+
           {activeTab === 'bag' && (
             <div className="form-stack">
               <h3 style={{ fontSize: '1.15rem' }}>Equipamentos Ativos</h3>
@@ -1073,7 +1113,6 @@ export function CharacterHud({
             </div>
           )}
 
-          {/* ABA 4: MERCADO */}
           {activeTab === 'shop' && (
             <div className="form-stack">
               <h3 style={{ fontSize: '1.15rem' }}>Pavilhão de Tesouros</h3>
@@ -1155,7 +1194,10 @@ export function CharacterHud({
                                 buyMutation.mutate(
                                   { item_id: item.id, quantity: 1 },
                                   {
-                                    onSuccess: (d) => showToast('success', d.message),
+                                    onSuccess: (d) => {
+                                      showToast('success', d.message);
+                                      refreshQuests();
+                                    },
                                     onError: (err) => showToast('error', getErrorMessage(err)),
                                   }
                                 );
@@ -1183,7 +1225,10 @@ export function CharacterHud({
                                   buyMutation.mutate(
                                     { item_id: item.id, quantity: 5 },
                                     {
-                                      onSuccess: (d) => showToast('success', d.message),
+                                      onSuccess: (d) => {
+                                        showToast('success', d.message);
+                                        refreshQuests();
+                                      },
                                       onError: (err) => showToast('error', getErrorMessage(err)),
                                     }
                                   );

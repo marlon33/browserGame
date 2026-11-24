@@ -275,3 +275,51 @@ export interface CharacterItem {
   is_equipped: boolean;
   item: Item;
 }
+
+export interface QuestDefinition {
+  id: number;
+  slug: string;
+  title: string;
+  description: string;
+  category: 'story' | 'daily';
+  min_level: number;
+  sort_order: number;
+  objective_type: 'visit_region' | 'kill_monster' | 'kill_any' | 'reach_level' | 'collect_item';
+  target_region_slug: string | null;
+  target_monster_id: number | null;
+  target_item_id: number | null;
+  target_count: number;
+  reward_xp: number;
+  reward_spirit_stones: number;
+  reward_cultivation_qi: number;
+  reward_jade_tokens: number;
+  reward_item_id: number | null;
+  reward_item_quantity: number;
+  target_monster?: {
+    id: number;
+    name: string;
+    zone_name: string;
+  } | null;
+  target_item?: {
+    id: number;
+    name: string;
+    rarity: Item['rarity'];
+  } | null;
+  reward_item?: {
+    id: number;
+    name: string;
+    rarity: Item['rarity'];
+  } | null;
+}
+
+export interface CharacterQuestEntry {
+  id: number;
+  character_id: number;
+  quest_id: number;
+  daily_date: string | null;
+  current_count: number;
+  status: 'in_progress' | 'completed' | 'claimed';
+  completed_at: string | null;
+  claimed_at: string | null;
+  quest: QuestDefinition;
+}

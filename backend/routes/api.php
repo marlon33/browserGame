@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CharacterController;
 use App\Http\Controllers\Api\GameplayController;
 use App\Http\Controllers\Api\InventoryController;
+use App\Http\Controllers\Api\QuestController;
 use App\Http\Controllers\Api\WorldController;
 use Illuminate\Support\Facades\Route;
 
@@ -42,5 +43,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{characterItemId}/equip', [InventoryController::class, 'toggleEquip']);
         Route::post('/{characterItemId}/use', [InventoryController::class, 'useItem']);
         Route::post('/{characterItemId}/sell', [InventoryController::class, 'sell']);
+    });
+
+    Route::prefix('quests')->group(function () {
+        Route::get('/', [QuestController::class, 'index']);
+        Route::post('/visit-region', [QuestController::class, 'visitRegion']);
+        Route::post('/{characterQuestId}/claim', [QuestController::class, 'claim']);
     });
 });

@@ -11,6 +11,10 @@ use Illuminate\Validation\ValidationException;
 
 class CombatEngineService
 {
+    public function __construct(
+        private readonly QuestProgressService $questProgressService
+    ) {}
+
     public function fightMonster(Character $character, Monster $monster, int $times = 1): array
     {
         $times = max(1, min(3, $times));
@@ -30,13 +34,11 @@ class CombatEngineService
 
             $char->syncLazyResources();
 
-            // Carrega/cria registro no Bestiário
             $bestiary = CharacterMonsterStat::firstOrCreate(
                 ['character_id' => $char->id, 'monster_id' => $monster->id],
                 ['kills_count' => 0, 'defeats_count' => 0]
             );
 
-            // Verifica Cooldown de Chefe
             if ($monster->is_boss && $bestiary->boss_cooldown_until && $bestiary->boss_cooldown_until->isFuture()) {
                 $secs = (int) now()->diffInSeconds($bestiary->boss_cooldown_until);
                 throw ValidationException::withMessages([
@@ -44,7 +46,6 @@ class CombatEngineService
                 ]);
             }
 
-            // Varredura (x3) exige já ter derrotado a besta ao menos 3 vezes
             if ($times > 1 && $bestiary->kills_count < 3) {
                 throw ValidationException::withMessages([
                     'sweep' => ['Derrote esta besta pelo menos 3 vezes antes de liberar a Varredura Rápida (x3).'],
@@ -65,7 +66,6 @@ class CombatEngineService
                 ]);
             }
 
-            // Deduz energia total
             $char->energy -= $totalEnergyCost;
 
             $effStats = $char->effective_stats;
@@ -84,6 +84,7 @@ class CombatEngineService
             $totalStones = 0;
             $totalQi = 0;
             $totalLevels = 0;
+            $victoriesCount = 0;
             $allDrops = [];
             $lastLog = [];
             $lastRounds = 0;
@@ -125,7 +126,6 @@ class CombatEngineService
                                 : "Rodada {$round}: Você atacou {$monster->name} causando {$damage} de dano.",
                         ];
                     } else {
-                        // Boss tem 20% de chance de habilidade furiosa (1.4x dano)
                         $bossFury = $monster->is_boss && random_int(1, 100) <= 20;
                         $variance = random_int(90, 110) / 100;
                         $rawDamage = max(2, ($monster->attack - ($playerDefense * 0.6)) * $variance);
@@ -155,6 +155,7 @@ class CombatEngineService
                 $qiGained = 0;
 
                 if ($victory) {
+                    $victoriesCount++;
                     $xpMult = $char->server->xp_multiplier ?? 1.0;
                     $dropMult = $char->server->drop_multiplier ?? 1.0;
 
@@ -177,7 +178,6 @@ class CombatEngineService
                         $bestiary->boss_cooldown_until = now()->addSeconds($monster->boss_cooldown_seconds);
                     }
 
-                    // Rolagem de Drops com bônus do Bestiário
                     $masteryDropBonus = $bestiary->masteryTier()['drop_bonus_pct'];
                     foreach ($monster->drops as $drop) {
                         if (! $drop->item) {
@@ -234,6 +234,11 @@ class CombatEngineService
             $bestiary->save();
             $char->last_active_at = now();
             $char->save();
+
+            if ($victoriesCount > 0) {
+                $this->questProgressService->recordMonsterKills($char, $monster->id, $victoriesCount);
+            }
+
             $char->load(['server', 'realm', 'cultivationRank']);
 
             return [

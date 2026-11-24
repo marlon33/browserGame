@@ -17,6 +17,8 @@ interface HuntArenaProps {
   activeBattle: ActiveBattle | null;
   isStartingBattle: boolean;
   isExecutingAction: boolean;
+  initialRegionSlug?: string | null;
+  onSelectRegion?: (regionSlug: string) => void;
   onStartTacticalBattle: (monsterId: number) => void;
   onTacticalAction: (battleId: number, action: TacticalActionType) => void;
   onTacticalMonsterTurn: (battleId: number) => void;
@@ -45,23 +47,30 @@ export function HuntArena({
   activeBattle,
   isStartingBattle,
   isExecutingAction,
+  initialRegionSlug,
+  onSelectRegion,
   onStartTacticalBattle,
   onTacticalAction,
   onTacticalMonsterTurn,
   onSweepHunt,
 }: HuntArenaProps) {
-  const [selectedRegion, setSelectedRegion] = useState<string>('all');
+  const [selectedRegion, setSelectedRegion] = useState<string>(initialRegionSlug || 'all');
   const [inspectedMonsterId, setInspectedMonsterId] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState<number>(() => Date.now());
   const autoTurnTriggeredRef = useRef<string | null>(null);
 
-  // Atualiza cronômetros de Bosses e do Turno Ativo a cada 250ms para precisão
+  useEffect(() => {
+    if (initialRegionSlug) {
+      setSelectedRegion(initialRegionSlug);
+      onSelectRegion?.(initialRegionSlug);
+    }
+  }, [initialRegionSlug]);
+
   useEffect(() => {
     const timer = setInterval(() => setNowTick(Date.now()), 250);
     return () => clearInterval(timer);
   }, []);
 
-  // Calcula segundos restantes do turno atual na batalha tática
   const turnSecondsLeft = useMemo(() => {
     if (!activeBattle || activeBattle.status !== 'active' || !activeBattle.turn_expires_at) {
       return 0;
@@ -70,7 +79,6 @@ export function HuntArena({
     return Math.max(0, Math.ceil(diff));
   }, [activeBattle, nowTick]);
 
-  // Dispara automaticamente o fim de turno (15s do jogador ou 3s do mob)
   useEffect(() => {
     if (!activeBattle || activeBattle.status !== 'active' || isExecutingAction) return;
 
@@ -120,9 +128,13 @@ export function HuntArena({
     return monsters.filter((m) => m.region_slug === selectedRegion);
   }, [monsters, selectedRegion]);
 
-  // ============================================================================
-  // TELA 1: ARENA DE COMBATE TÁTICO ATIVA (TURNOS 15s PLAYER / 3s MOB)
-  // ============================================================================
+  const handleRegionClick = (slug: string) => {
+    setSelectedRegion(slug);
+    if (slug !== 'all') {
+      onSelectRegion?.(slug);
+    }
+  };
+
   if (activeBattle && activeBattle.status === 'active') {
     const monster = activeBattle.monster;
     const isPlayerTurn = activeBattle.current_turn === 'player';
@@ -147,7 +159,6 @@ export function HuntArena({
 
     return (
       <div className="form-stack">
-        {/* Cabeçalho da Arena */}
         <div
           style={{
             display: 'flex',
@@ -200,9 +211,7 @@ export function HuntArena({
           </div>
         </div>
 
-        {/* Combatentes (Player vs Mob) */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
-          {/* Card Jogador */}
           <div
             style={{
               background: 'var(--bg-void)',
@@ -234,7 +243,6 @@ export function HuntArena({
             )}
           </div>
 
-          {/* Card Monstro */}
           <div
             style={{
               background: 'var(--bg-void)',
@@ -267,7 +275,6 @@ export function HuntArena({
           </div>
         </div>
 
-        {/* Painel de Ações do Jogador (Até 3 ações por turno) */}
         {isPlayerTurn ? (
           <div
             style={{
@@ -420,7 +427,6 @@ export function HuntArena({
           </div>
         )}
 
-        {/* Log em tempo real da batalha */}
         <div
           style={{
             background: 'var(--bg-void)',
@@ -455,9 +461,6 @@ export function HuntArena({
     );
   }
 
-  // ============================================================================
-  // TELA 2: COMPARATIVO FRENTE A FRENTE (JOGADOR À ESQUERDA vs MOB À DIREITA)
-  // ============================================================================
   if (inspectedMonster) {
     const bestiary = inspectedMonster.bestiary;
     const kills = bestiary?.kills_count ?? 0;
@@ -476,7 +479,6 @@ export function HuntArena({
       character.hp > 0 &&
       bossCooldownSec === 0;
 
-    // Status efetivos do jogador para comparação direta
     const eff = character.effective_stats;
     const combat = character.combat_summary;
     const playerMaxHp = eff?.max_hp ?? character.max_hp;
@@ -489,26 +491,10 @@ export function HuntArena({
     const playerAgility = eff?.agility ?? character.agility;
 
     const comparisonRows = [
-      {
-        label: 'HP Máx.',
-        playerVal: playerMaxHp,
-        mobVal: inspectedMonster.max_hp,
-      },
-      {
-        label: 'Ataque',
-        playerVal: playerAttack,
-        mobVal: inspectedMonster.attack,
-      },
-      {
-        label: 'Defesa',
-        playerVal: playerDefense,
-        mobVal: inspectedMonster.defense,
-      },
-      {
-        label: 'Agilidade',
-        playerVal: playerAgility,
-        mobVal: inspectedMonster.agility,
-      },
+      { label: 'HP Máx.', playerVal: playerMaxHp, mobVal: inspectedMonster.max_hp },
+      { label: 'Ataque', playerVal: playerAttack, mobVal: inspectedMonster.attack },
+      { label: 'Defesa', playerVal: playerDefense, mobVal: inspectedMonster.defense },
+      { label: 'Agilidade', playerVal: playerAgility, mobVal: inspectedMonster.agility },
     ];
 
     const playerAttacksFirst = playerAgility >= inspectedMonster.agility;
@@ -547,7 +533,6 @@ export function HuntArena({
               : '1px solid rgba(255,255,255,0.1)',
           }}
         >
-          {/* Cabeçalho VS (Jogador vs Adversário) */}
           <div
             style={{
               display: 'grid',
@@ -559,7 +544,6 @@ export function HuntArena({
               borderBottom: '1px solid rgba(255,255,255,0.08)',
             }}
           >
-            {/* Lado Esquerdo: Player */}
             <div>
               <div style={{ fontSize: '0.72rem', color: 'var(--jade-accent)', fontWeight: 700 }}>
                 VOCÊ • Nv.{character.level}
@@ -572,7 +556,6 @@ export function HuntArena({
               </div>
             </div>
 
-            {/* Centro: VS */}
             <div
               style={{
                 fontSize: '0.78rem',
@@ -587,7 +570,6 @@ export function HuntArena({
               VS
             </div>
 
-            {/* Lado Direito: Adversário */}
             <div style={{ textAlign: 'right' }}>
               <div
                 style={{
@@ -613,7 +595,6 @@ export function HuntArena({
             </div>
           </div>
 
-          {/* Tabela Comparativa: Esquerda (Player) | Centro (Atributo + Diferença) | Direita (Adversário) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', marginBottom: '0.85rem' }}>
             {comparisonRows.map((row) => {
               const diff = row.playerVal - row.mobVal;
@@ -633,7 +614,6 @@ export function HuntArena({
                     border: '1px solid rgba(255,255,255,0.04)',
                   }}
                 >
-                  {/* Valor Player (Esquerda) */}
                   <div style={{ textAlign: 'left' }}>
                     <strong
                       style={{
@@ -645,7 +625,6 @@ export function HuntArena({
                     </strong>
                   </div>
 
-                  {/* Rótulo + Badge de Diferença (Centro) */}
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>
                       {row.label}
@@ -661,7 +640,6 @@ export function HuntArena({
                     </span>
                   </div>
 
-                  {/* Valor Adversário (Direita) */}
                   <div style={{ textAlign: 'right' }}>
                     <strong
                       style={{
@@ -677,7 +655,6 @@ export function HuntArena({
             })}
           </div>
 
-          {/* Indicador de Iniciativa */}
           <div
             style={{
               fontSize: '0.75rem',
@@ -696,7 +673,6 @@ export function HuntArena({
               : `⚠️ Iniciativa do inimigo: ${inspectedMonster.name} é mais veloz e atacará primeiro em 3s!`}
           </div>
 
-          {/* Bestiário e Recompensas */}
           <div style={{ fontSize: '0.78rem', marginBottom: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
             <div>
               <span style={{ color: 'var(--text-muted)' }}>Recompensas Base: </span>
@@ -715,7 +691,6 @@ export function HuntArena({
             </div>
           </div>
 
-          {/* Drops Possíveis */}
           {inspectedMonster.drops && inspectedMonster.drops.length > 0 && (
             <div style={{ marginBottom: '1rem' }}>
               <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
@@ -766,9 +741,6 @@ export function HuntArena({
     );
   }
 
-  // ============================================================================
-  // TELA 3: LISTA DE TERRITÓRIOS E SELEÇÃO DE MOBS
-  // ============================================================================
   return (
     <div className="form-stack">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
@@ -778,11 +750,10 @@ export function HuntArena({
         </span>
       </div>
 
-      {/* Filtro de Regiões */}
       <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
         <button
           type="button"
-          onClick={() => setSelectedRegion('all')}
+          onClick={() => handleRegionClick('all')}
           style={{
             padding: '0.32rem 0.7rem',
             borderRadius: '999px',
@@ -801,7 +772,7 @@ export function HuntArena({
           <button
             key={reg.slug}
             type="button"
-            onClick={() => setSelectedRegion(reg.slug)}
+            onClick={() => handleRegionClick(reg.slug)}
             style={{
               padding: '0.32rem 0.7rem',
               borderRadius: '999px',
@@ -965,7 +936,6 @@ export function HuntArena({
         </div>
       )}
 
-      {/* Relatório da Última Batalha */}
       {lastBattle && (
         <div
           style={{

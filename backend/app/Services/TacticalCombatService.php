@@ -15,9 +15,10 @@ class TacticalCombatService
     public const PLAYER_TURN_SECONDS = 15;
     public const MONSTER_TURN_SECONDS = 3;
 
-    /**
-     * Inicia uma nova batalha tática por turnos ou retorna a batalha ativa existente
-     */
+    public function __construct(
+        private readonly QuestProgressService $questProgressService
+    ) {}
+
     public function startBattle(Character $character, Monster $monster): ActiveBattle
     {
         return DB::transaction(function () use ($character, $monster) {
@@ -29,7 +30,6 @@ class TacticalCombatService
 
             $char->syncLazyResources();
 
-            // Se já houver uma batalha ativa, retorna ela
             $existing = ActiveBattle::with('monster.drops.item')
                 ->where('character_id', $char->id)
                 ->where('status', 'active')
@@ -63,10 +63,13 @@ class TacticalCombatService
                 ]);
             }
 
-            // Deduz energia de entrada no combate
             $char->energy -= $monster->energy_cost;
             $char->last_active_at = now();
             $char->save();
+
+            if ($monster->region_slug) {
+                $this->questProgressService->recordRegionVisit($char, $monster->region_slug);
+            }
 
             $effStats = $char->effective_stats;
             $playerStarts = $effStats['agility'] >= $monster->agility;
@@ -111,15 +114,6 @@ class TacticalCombatService
         });
     }
 
-    /**
-     * Executa uma ação do jogador no turno atual:
-     * - 'heal' (Recuperação de vida - até 1x no turno, não passa a vez)
-     * - 'buff' (Aura Espiritual - até 1x apoio no turno, não passa a vez)
-     * - 'debuff' (Selo de Fraqueza - até 1x apoio no turno, não passa a vez)
-     * - 'physical' (Ataque Físico - encerra turno do jogador e passa para o mob)
-     * - 'magic' (Técnica Espiritual / Magia - encerra turno do jogador e passa para o mob)
-     * - 'pass' (Passar turno / tempo esgotado de 15s - passa para o mob)
-     */
     public function performPlayerAction(Character $character, ActiveBattle $battle, string $action): array
     {
         return DB::transaction(function () use ($character, $battle, $action) {
@@ -166,7 +160,6 @@ class TacticalCombatService
             $buffMult = $buffActive ? 1.25 : 1.0;
             $debuffDefMult = $debuffActive ? 0.70 : 1.0;
 
-            // Se o tempo de 15s expirou, força passagem de turno
             if ($b->turn_expires_at && $b->turn_expires_at->isPast() && $action !== 'pass') {
                 $action = 'pass';
             }
@@ -248,7 +241,6 @@ class TacticalCombatService
                             : "⚔️ Turno {$b->round}: Ataque Físico causou {$damage} de dano em {$b->monster->name}.",
                     ];
 
-                    // Encerra turno do jogador -> passa para o Mob (3s)
                     $b->current_turn = 'monster';
                     $b->turn_expires_at = now()->addSeconds(self::MONSTER_TURN_SECONDS);
                     break;
@@ -258,7 +250,6 @@ class TacticalCombatService
                     $isCrit = random_int(1, 100) <= $critChance;
                     $variance = random_int(94, 114) / 100;
 
-                    // Magia escala fortemente com Poder Espiritual e ignora metade da defesa física
                     $magicAtk = ($effStats['spirit_power'] * 2.6 + $effStats['strength'] * 0.4) * $rankMult * $masteryDamageMult * $buffMult;
                     $targetDef = $b->monster->defense * $debuffDefMult * 0.30;
                     $rawDmg = max(5, ($magicAtk - $targetDef) * $variance);
@@ -275,7 +266,6 @@ class TacticalCombatService
                             : "✨ Turno {$b->round}: Técnica Espiritual causou {$damage} de dano arcano.",
                     ];
 
-                    // Encerra turno do jogador -> passa para o Mob (3s)
                     $b->current_turn = 'monster';
                     $b->turn_expires_at = now()->addSeconds(self::MONSTER_TURN_SECONDS);
                     break;
@@ -298,7 +288,6 @@ class TacticalCombatService
             $b->active_effects = $effects;
             $b->combat_log = $log;
 
-            // Verifica se o monstro morreu
             if ($b->monster_hp <= 0) {
                 return $this->finalizeBattle($char, $b, $bestiary, true);
             }
@@ -313,9 +302,6 @@ class TacticalCombatService
         });
     }
 
-    /**
-     * Executa o turno do Monstro após os 3s e devolve a vez para o Jogador (com novo timer de 15s)
-     */
     public function executeMonsterTurn(Character $character, ActiveBattle $battle): array
     {
         return DB::transaction(function () use ($character, $battle) {
@@ -335,7 +321,6 @@ class TacticalCombatService
                 ];
             }
 
-            // Se ainda está no turno do jogador, mas os 15s expiraram, passa automaticamente para o mob
             if ($b->current_turn === 'player') {
                 if ($b->turn_expires_at && $b->turn_expires_at->isPast()) {
                     $log = $b->combat_log ?? [];
@@ -399,12 +384,10 @@ class TacticalCombatService
 
             $b->combat_log = $log;
 
-            // Verifica derrota do jogador
             if ($b->player_hp <= 0) {
                 return $this->finalizeBattle($char, $b, $bestiary, false);
             }
 
-            // Decrementa duração dos efeitos ativos e inicia novo turno do jogador (15s + 3 ações liberadas)
             if (($effects['player_buff_turns'] ?? 0) > 0) {
                 $effects['player_buff_turns'] -= 1;
             }
@@ -431,9 +414,6 @@ class TacticalCombatService
         });
     }
 
-    /**
-     * Finaliza a batalha, aplica recompensas/drops/bestiário e grava no BattleLog
-     */
     private function finalizeBattle(
         Character $char,
         ActiveBattle $b,
@@ -497,6 +477,10 @@ class TacticalCombatService
         $bestiary->save();
         $char->last_active_at = now();
         $char->save();
+
+        if ($victory) {
+            $this->questProgressService->recordMonsterKills($char, $monster->id, 1);
+        }
 
         $outcome = $victory ? 'victory' : 'defeat';
         $rewardsSummary = [
