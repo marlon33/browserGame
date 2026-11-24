@@ -31,6 +31,10 @@ class Character extends Model
         'last_active_at',
     ];
 
+    protected $appends = [
+        'effective_stats',
+    ];
+
     protected function casts(): array
     {
         return [
@@ -64,6 +68,48 @@ class Character extends Model
         return $this->hasMany(BattleLog::class);
     }
 
+    public function items(): HasMany
+    {
+        return $this->hasMany(CharacterItem::class);
+    }
+
+    /**
+     * Calcula os atributos totais somando atributos base + itens equipados
+     */
+    public function getEffectiveStatsAttribute(): array
+    {
+        $equipped = $this->items()->with('item')->where('is_equipped', true)->get();
+
+        $bonusStr = 0;
+        $bonusAgi = 0;
+        $bonusCon = 0;
+        $bonusSpi = 0;
+        $bonusHp = 0;
+
+        foreach ($equipped as $charItem) {
+            if ($charItem->item) {
+                $bonusStr += $charItem->item->bonus_strength;
+                $bonusAgi += $charItem->item->bonus_agility;
+                $bonusCon += $charItem->item->bonus_constitution;
+                $bonusSpi += $charItem->item->bonus_spirit_power;
+                $bonusHp += $charItem->item->bonus_max_hp;
+            }
+        }
+
+        return [
+            'strength' => $this->strength + $bonusStr,
+            'agility' => $this->agility + $bonusAgi,
+            'constitution' => $this->constitution + $bonusCon,
+            'spirit_power' => $this->spirit_power + $bonusSpi,
+            'max_hp' => $this->max_hp + $bonusHp,
+            'bonus_strength' => $bonusStr,
+            'bonus_agility' => $bonusAgi,
+            'bonus_constitution' => $bonusCon,
+            'bonus_spirit_power' => $bonusSpi,
+            'bonus_max_hp' => $bonusHp,
+        ];
+    }
+
     /**
      * Sincronização Lazy de Energia (+1 a cada 3 minutos)
      */
@@ -94,17 +140,11 @@ class Character extends Model
         }
     }
 
-    /**
-     * XP necessária para subir do nível atual para o próximo
-     */
     public function xpForNextLevel(): int
     {
         return (int) round(100 * pow($this->level, 1.45));
     }
 
-    /**
-     * Aplica ganho de XP, sobe níveis, concede pontos de atributo e verifica avanço de Patente de Cultivo
-     */
     public function grantExperience(int $amount): array
     {
         $this->experience += max(0, $amount);
@@ -116,11 +156,10 @@ class Character extends Model
             $this->level += 1;
             $this->stat_points += 3;
             $this->max_hp += 15;
-            $this->hp = $this->max_hp;
+            $this->hp = $this->effective_stats['max_hp'];
             $levelsGained++;
         }
 
-        // Verifica avanço automático de Patente de Cultivo baseado em XP total acumulado + nível
         $totalProgressionScore = $this->experience + ($this->level - 1) * 150;
         $nextRank = CultivationRank::where('tier_order', '>', $this->cultivationRank->tier_order)
             ->where('required_xp', '<=', $totalProgressionScore)
@@ -132,7 +171,7 @@ class Character extends Model
             $this->cultivation_rank_id = $nextRank->id;
             $this->max_energy += $energyDiff;
             $this->energy = min($this->max_energy, $this->energy + $energyDiff);
-            $this->hp = $this->max_hp;
+            $this->hp = $this->effective_stats['max_hp'];
             $rankUpTitle = $nextRank->title;
         }
 
@@ -140,5 +179,25 @@ class Character extends Model
             'levels_gained' => $levelsGained,
             'rank_up_title' => $rankUpTitle,
         ];
+    }
+
+    /**
+     * Adiciona um item empilhável ou individual ao inventário do personagem
+     */
+    public function addItemToInventory(Item $item, int $quantity = 1): CharacterItem
+    {
+        if ($item->type === 'consumable') {
+            $existing = $this->items()->where('item_id', $item->id)->first();
+            if ($existing) {
+                $existing->increment('quantity', $quantity);
+                return $existing->fresh('item');
+            }
+        }
+
+        return $this->items()->create([
+            'item_id' => $item->id,
+            'quantity' => $quantity,
+            'is_equipped' => false,
+        ])->load('item');
     }
 }

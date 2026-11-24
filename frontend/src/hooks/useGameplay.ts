@@ -7,6 +7,7 @@ export type StatKey = 'strength' | 'agility' | 'constitution' | 'spirit_power';
 export function useGameplay(characterId: number) {
   const queryClient = useQueryClient();
   const charQueryKey = ['character', 'active', String(characterId)];
+  const invQueryKey = ['inventory', String(characterId)];
 
   const monstersQuery = useQuery({
     queryKey: ['gameplay', 'monsters'],
@@ -56,6 +57,9 @@ export function useGameplay(characterId: number) {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(charQueryKey, data.character);
+      if (data.items_dropped && data.items_dropped.length > 0) {
+        queryClient.invalidateQueries({ queryKey: invQueryKey });
+      }
     },
   });
 

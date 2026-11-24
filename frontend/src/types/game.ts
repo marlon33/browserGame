@@ -32,6 +32,19 @@ export interface CultivationRank {
   bonus_max_energy: number;
 }
 
+export interface EffectiveStats {
+  strength: number;
+  agility: number;
+  constitution: number;
+  spirit_power: number;
+  max_hp: number;
+  bonus_strength: number;
+  bonus_agility: number;
+  bonus_constitution: number;
+  bonus_spirit_power: number;
+  bonus_max_hp: number;
+}
+
 export interface Character {
   id: number;
   user_id: number;
@@ -53,6 +66,7 @@ export interface Character {
   constitution: number;
   spirit_power: number;
   stat_points: number;
+  effective_stats?: EffectiveStats;
   server?: GameServer;
   realm?: Realm;
   cultivation_rank?: CultivationRank;
@@ -89,14 +103,51 @@ export interface CombatLogEntry {
   text: string;
 }
 
+export interface DroppedItemSummary {
+  item_id: number;
+  name: string;
+  rarity: 'common' | 'rare' | 'epic' | 'legendary';
+  quantity: number;
+}
+
 export interface HuntResult {
   outcome: 'victory' | 'defeat';
   rounds: number;
   xp_gained: number;
   spirit_stones_gained: number;
+  items_dropped?: DroppedItemSummary[];
   levels_gained: number;
   rank_up_title: string | null;
   combat_log: CombatLogEntry[];
   battle_id: number;
   character: Character;
+}
+
+export interface Item {
+  id: number;
+  slug: string;
+  name: string;
+  description: string;
+  type: 'weapon' | 'armor' | 'accessory' | 'consumable';
+  rarity: 'common' | 'rare' | 'epic' | 'legendary';
+  required_level: number;
+  buy_price: number;
+  sell_price: number;
+  is_purchasable: boolean;
+  bonus_strength: number;
+  bonus_agility: number;
+  bonus_constitution: number;
+  bonus_spirit_power: number;
+  bonus_max_hp: number;
+  heal_hp: number;
+  restore_energy: number;
+}
+
+export interface CharacterItem {
+  id: number;
+  character_id: number;
+  item_id: number;
+  quantity: number;
+  is_equipped: boolean;
+  item: Item;
 }

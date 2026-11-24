@@ -10,15 +10,11 @@ use Illuminate\Validation\ValidationException;
 
 class CombatEngineService
 {
-    /**
-     * Executa uma batalha PvE completa de forma 100% Server-Authoritative
-     */
     public function fightMonster(Character $character, Monster $monster): array
     {
         return DB::transaction(function () use ($character, $monster) {
-            // Lock pessimista para impedir race condition / gasto duplo de energia
             /** @var Character $char */
-            $char = Character::with(['server', 'realm', 'cultivationRank'])
+            $char = Character::with(['server', 'realm', 'cultivationRank', 'items.item'])
                 ->where('id', $character->id)
                 ->lockForUpdate()
                 ->firstOrFail();
@@ -33,31 +29,31 @@ class CombatEngineService
 
             if ($char->hp <= 0) {
                 throw ValidationException::withMessages([
-                    'hp' => ['Seu cultivador está ferido. Medite ou recupere HP antes de caçar.'],
+                    'hp' => ['Seu cultivador está ferido. Medite ou use uma pílula de cura antes de caçar.'],
                 ]);
             }
 
-            // Consome energia imediatamente
             $char->energy -= $monster->energy_cost;
 
-            // Calcula poder efetivo do jogador com multiplicador da Patente de Cultivo
+            // Usa effective_stats (Base + Equipamentos)
+            $stats = $char->effective_stats;
             $rankMult = $char->cultivationRank->stat_multiplier ?? 1.0;
-            $playerAtk = (int) round(($char->strength * 1.8 + $char->spirit_power * 1.2) * $rankMult);
-            $playerDef = (int) round(($char->constitution * 1.4 + $char->agility * 0.5) * $rankMult);
-            $playerCritChance = min(45, 5 + (int) floor($char->agility * 0.4));
 
-            $playerHp = $char->hp;
+            $playerAtk = (int) round(($stats['strength'] * 1.8 + $stats['spirit_power'] * 1.2) * $rankMult);
+            $playerDef = (int) round(($stats['constitution'] * 1.4 + $stats['agility'] * 0.5) * $rankMult);
+            $playerCritChance = min(45, 5 + (int) floor($stats['agility'] * 0.4));
+
+            $playerHp = min($char->hp, $stats['max_hp']);
             $monsterHp = $monster->max_hp;
 
             $rounds = 0;
             $maxRounds = 25;
             $log = [];
 
-            $playerFirst = $char->agility >= $monster->agility;
+            $playerFirst = $stats['agility'] >= $monster->agility;
 
             while ($playerHp > 0 && $monsterHp > 0 && $rounds < $maxRounds) {
                 $rounds++;
-
                 $turnOrder = $playerFirst ? ['player', 'monster'] : ['monster', 'player'];
 
                 foreach ($turnOrder as $actor) {
@@ -105,6 +101,7 @@ class CombatEngineService
             $victory = $monsterHp <= 0 && $playerHp > 0;
             $xpGained = 0;
             $stonesGained = 0;
+            $itemsDropped = [];
             $progression = ['levels_gained' => 0, 'rank_up_title' => null];
 
             if ($victory) {
@@ -117,9 +114,24 @@ class CombatEngineService
                 $char->hp = $playerHp;
                 $char->spirit_stones += $stonesGained;
                 $progression = $char->grantExperience($xpGained);
+
+                // Sorteio Server-Authoritative de Drops
+                $monster->load('drops.item');
+                foreach ($monster->drops as $drop) {
+                    $effectiveChance = min(100, (int) round($drop->drop_chance_pct * $dropMult));
+                    if (random_int(1, 100) <= $effectiveChance && $drop->item) {
+                        $qty = random_int($drop->min_quantity, max($drop->min_quantity, $drop->max_quantity));
+                        $char->addItemToInventory($drop->item, $qty);
+                        $itemsDropped[] = [
+                            'item_id' => $drop->item->id,
+                            'name' => $drop->item->name,
+                            'rarity' => $drop->item->rarity,
+                            'quantity' => $qty,
+                        ];
+                    }
+                }
             } else {
-                // Em derrota, mantém 10% do HP para não travar o jogador
-                $char->hp = max(1, (int) floor($char->max_hp * 0.1));
+                $char->hp = max(1, (int) floor($stats['max_hp'] * 0.1));
             }
 
             $char->last_active_at = now();
@@ -141,6 +153,7 @@ class CombatEngineService
                 'rounds' => $rounds,
                 'xp_gained' => $xpGained,
                 'spirit_stones_gained' => $stonesGained,
+                'items_dropped' => $itemsDropped,
                 'levels_gained' => $progression['levels_gained'],
                 'rank_up_title' => $progression['rank_up_title'],
                 'combat_log' => $log,

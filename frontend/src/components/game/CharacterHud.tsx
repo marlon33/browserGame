@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useGameplay, type StatKey } from '@/hooks/useGameplay';
+import { useInventory } from '@/hooks/useInventory';
 import { getErrorMessage } from '@/utils/getErrorMessage';
-import type { Character, HuntResult } from '@/types/game';
+import type { Character, HuntResult, Item } from '@/types/game';
 
 interface CharacterHudProps {
   character: Character;
@@ -9,7 +10,33 @@ interface CharacterHudProps {
   onLogout: () => void;
 }
 
-type GameTab = 'cultivate' | 'hunt';
+type GameTab = 'cultivate' | 'hunt' | 'bag' | 'shop';
+
+const RARITY_COLORS: Record<Item['rarity'], string> = {
+  common: '#9ca3af',
+  rare: '#38bdf8',
+  epic: '#c084fc',
+  legendary: '#f59e0b',
+};
+
+const TYPE_LABELS: Record<Item['type'], string> = {
+  weapon: 'Arma',
+  armor: 'Armadura',
+  accessory: 'Acessório',
+  consumable: 'Consumível',
+};
+
+function formatItemStats(item: Item): string {
+  const parts: string[] = [];
+  if (item.bonus_strength) parts.push(`+${item.bonus_strength} Força`);
+  if (item.bonus_agility) parts.push(`+${item.bonus_agility} Agilidade`);
+  if (item.bonus_constitution) parts.push(`+${item.bonus_constitution} Constituição`);
+  if (item.bonus_spirit_power) parts.push(`+${item.bonus_spirit_power} Poder Esp.`);
+  if (item.bonus_max_hp) parts.push(`+${item.bonus_max_hp} HP Máx`);
+  if (item.heal_hp) parts.push(`Cura ${item.heal_hp} HP`);
+  if (item.restore_energy) parts.push(`+${item.restore_energy} Energia`);
+  return parts.join(' • ');
+}
 
 export function CharacterHud({
   character,
@@ -28,7 +55,19 @@ export function CharacterHud({
     huntMutation,
   } = useGameplay(character.id);
 
-  const hpPercent = Math.min(100, Math.round((character.hp / Math.max(1, character.max_hp)) * 100));
+  const {
+    shopItems,
+    inventory,
+    isLoadingInventory,
+    buyMutation,
+    equipMutation,
+    useItemMutation,
+    sellMutation,
+  } = useInventory(character.id);
+
+  const eff = character.effective_stats;
+  const displayMaxHp = eff?.max_hp ?? character.max_hp;
+  const hpPercent = Math.min(100, Math.round((character.hp / Math.max(1, displayMaxHp)) * 100));
   const energyPercent = Math.min(
     100,
     Math.round((character.energy / Math.max(1, character.max_energy)) * 100)
@@ -44,20 +83,11 @@ export function CharacterHud({
     meditateMutation.mutate(undefined, {
       onSuccess: (data) => {
         let msg = data.message;
-        if (data.levels_gained > 0) {
-          msg += ` 🎉 Subiu para o Nível ${data.character.level}!`;
-        }
-        if (data.rank_up_title) {
-          msg += ` ⚡ Nova Patente: ${data.rank_up_title}!`;
-        }
+        if (data.levels_gained > 0) msg += ` 🎉 Nível ${data.character.level}!`;
+        if (data.rank_up_title) msg += ` ⚡ Patente: ${data.rank_up_title}!`;
         setToastMessage(msg);
       },
     });
-  };
-
-  const handleAllocateStat = (stat: StatKey) => {
-    setToastMessage(null);
-    allocateStatMutation.mutate({ stat, amount: 1 });
   };
 
   const handleHunt = (monsterId: number) => {
@@ -75,18 +105,47 @@ export function CharacterHud({
   };
 
   const activeError =
-    meditateMutation.error || allocateStatMutation.error || huntMutation.error;
+    meditateMutation.error ||
+    allocateStatMutation.error ||
+    huntMutation.error ||
+    buyMutation.error ||
+    equipMutation.error ||
+    useItemMutation.error ||
+    sellMutation.error;
 
-  const statList: { key: StatKey; label: string; value: number; desc: string }[] = [
-    { key: 'strength', label: 'Força', value: character.strength, desc: 'Dano físico' },
-    { key: 'agility', label: 'Agilidade', value: character.agility, desc: 'Crítico & iniciativa' },
-    { key: 'constitution', label: 'Constituição', value: character.constitution, desc: '+12 HP Máx & defesa' },
-    { key: 'spirit_power', label: 'Poder Espiritual', value: character.spirit_power, desc: 'Dano espiritual' },
+  const statList: { key: StatKey; label: string; total: number; bonus: number; desc: string }[] = [
+    {
+      key: 'strength',
+      label: 'Força',
+      total: eff?.strength ?? character.strength,
+      bonus: eff?.bonus_strength ?? 0,
+      desc: 'Dano físico',
+    },
+    {
+      key: 'agility',
+      label: 'Agilidade',
+      total: eff?.agility ?? character.agility,
+      bonus: eff?.bonus_agility ?? 0,
+      desc: 'Crítico & iniciativa',
+    },
+    {
+      key: 'constitution',
+      label: 'Constituição',
+      total: eff?.constitution ?? character.constitution,
+      bonus: eff?.bonus_constitution ?? 0,
+      desc: '+12 HP Máx & defesa',
+    },
+    {
+      key: 'spirit_power',
+      label: 'Poder Espiritual',
+      total: eff?.spirit_power ?? character.spirit_power,
+      bonus: eff?.bonus_spirit_power ?? 0,
+      desc: 'Dano espiritual',
+    },
   ];
 
   return (
     <div className="lobby-shell">
-      {/* Topbar Compacta Mobile-First */}
       <header className="topbar" style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           <span className="topbar-brand">{character.name}</span>
@@ -126,7 +185,7 @@ export function CharacterHud({
       </header>
 
       <main className="lobby-content">
-        {/* COLUNA 1: FICHA VITAL & ATRIBUTOS */}
+        {/* COLUNA 1: FICHA VITAL & ATRIBUTOS EFETIVOS */}
         <section className="auth-card" style={{ maxWidth: '100%' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
             <span
@@ -145,12 +204,12 @@ export function CharacterHud({
             </span>
           </div>
 
-          {/* Barra de HP */}
+          {/* HP */}
           <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
               <span>Vitalidade (HP)</span>
               <strong>
-                {character.hp} / {character.max_hp}
+                {character.hp} / {displayMaxHp}
               </strong>
             </div>
             <div style={{ height: '10px', background: 'var(--bg-void)', borderRadius: '999px', overflow: 'hidden' }}>
@@ -165,7 +224,7 @@ export function CharacterHud({
             </div>
           </div>
 
-          {/* Barra de Energia */}
+          {/* Energia */}
           <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
               <span>Energia (+1 / 3min)</span>
@@ -185,7 +244,7 @@ export function CharacterHud({
             </div>
           </div>
 
-          {/* Barra de Experiência */}
+          {/* XP */}
           <div style={{ marginBottom: '1.1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
               <span>Experiência (XP)</span>
@@ -206,14 +265,7 @@ export function CharacterHud({
           </div>
 
           {/* Moedas */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '0.65rem',
-              marginBottom: '1.1rem',
-            }}
-          >
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '1.1rem' }}>
             <div style={{ background: 'var(--bg-void)', padding: '0.65rem', borderRadius: '10px' }}>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Pedras Espirituais</div>
               <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--gold-primary)' }}>
@@ -228,7 +280,7 @@ export function CharacterHud({
             </div>
           </div>
 
-          {/* Atributos & Distribuição de Pontos */}
+          {/* Atributos */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
             <h3 style={{ fontSize: '1rem' }}>Atributos</h3>
             {character.stat_points > 0 && (
@@ -253,7 +305,14 @@ export function CharacterHud({
               >
                 <div>
                   <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{item.label}</div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>{item.value}</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>
+                    {item.total}{' '}
+                    {item.bonus > 0 && (
+                      <span style={{ fontSize: '0.74rem', color: 'var(--jade-accent)' }}>
+                        (+{item.bonus})
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize: '0.68rem', color: '#6b7280' }}>{item.desc}</div>
                 </div>
 
@@ -262,7 +321,7 @@ export function CharacterHud({
                     type="button"
                     aria-label={`Aumentar ${item.label}`}
                     disabled={allocateStatMutation.isPending}
-                    onClick={() => handleAllocateStat(item.key)}
+                    onClick={() => allocateStatMutation.mutate({ stat: item.key, amount: 1 })}
                     style={{
                       width: '36px',
                       height: '36px',
@@ -283,26 +342,52 @@ export function CharacterHud({
           </div>
         </section>
 
-        {/* COLUNA 2: AÇÕES DO MUNDO (MEDITAÇÃO & CAÇA PVE) */}
+        {/* COLUNA 2: ABAS DO MUNDO (MEDITAR, CAÇAR, MOCHILA, MERCADO) */}
         <section className="auth-card" style={{ maxWidth: '100%' }}>
-          <div className="auth-tabs" role="tablist">
+          <div
+            className="auth-tabs"
+            role="tablist"
+            style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.2rem' }}
+          >
             <button
               type="button"
               role="tab"
               aria-selected={activeTab === 'cultivate'}
               className={`auth-tab ${activeTab === 'cultivate' ? 'active' : ''}`}
+              style={{ fontSize: '0.8rem', padding: '0 0.25rem' }}
               onClick={() => setActiveTab('cultivate')}
             >
-              🧘 Meditar
+              🧘 Cultivo
             </button>
             <button
               type="button"
               role="tab"
               aria-selected={activeTab === 'hunt'}
               className={`auth-tab ${activeTab === 'hunt' ? 'active' : ''}`}
+              style={{ fontSize: '0.8rem', padding: '0 0.25rem' }}
               onClick={() => setActiveTab('hunt')}
             >
-              ⚔️ Caçar Bestas
+              ⚔️ Caça
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'bag'}
+              className={`auth-tab ${activeTab === 'bag' ? 'active' : ''}`}
+              style={{ fontSize: '0.8rem', padding: '0 0.25rem' }}
+              onClick={() => setActiveTab('bag')}
+            >
+              🎒 Mochila ({inventory.length})
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'shop'}
+              className={`auth-tab ${activeTab === 'shop' ? 'active' : ''}`}
+              style={{ fontSize: '0.8rem', padding: '0 0.25rem' }}
+              onClick={() => setActiveTab('shop')}
+            >
+              🏛️ Mercado
             </button>
           </div>
 
@@ -318,12 +403,12 @@ export function CharacterHud({
             </div>
           )}
 
-          {/* ABA 1: MEDITAÇÃO ESPIRITUAL */}
+          {/* ABA 1: CULTIVO */}
           {activeTab === 'cultivate' && (
             <div className="form-stack">
               <h3 style={{ fontSize: '1.15rem' }}>Câmara de Cultivo Espiritual</h3>
               <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                Absorva a energia do céu e da terra para refinar sua alma, ganhar experiência segura e recuperar <strong>35% do HP</strong>.
+                Absorva o Qi celestial para ganhar experiência segura, coletar Pedras Espirituais e restaurar <strong>35% do HP</strong>.
               </p>
 
               <div
@@ -361,9 +446,7 @@ export function CharacterHud({
               <h3 style={{ fontSize: '1.15rem' }}>Territórios de Caça</h3>
 
               {isLoadingMonsters ? (
-                <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>
-                  Rastreando bestas demoníacas...
-                </p>
+                <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>Rastreando bestas...</p>
               ) : (
                 <div className="form-stack">
                   {monsters.map((monster) => {
@@ -374,19 +457,19 @@ export function CharacterHud({
                         key={monster.id}
                         style={{
                           background: 'var(--bg-void)',
-                          padding: '0.9rem',
+                          padding: '0.85rem',
                           borderRadius: '12px',
                           border: '1px solid rgba(255,255,255,0.08)',
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <strong style={{ fontSize: '0.95rem' }}>{monster.name}</strong>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--gold-primary)', fontWeight: 700 }}>
-                            Nv. Rec. {monster.recommended_level}
+                          <strong style={{ fontSize: '0.94rem' }}>{monster.name}</strong>
+                          <span style={{ fontSize: '0.74rem', color: 'var(--gold-primary)', fontWeight: 700 }}>
+                            Nv. {monster.recommended_level}
                           </span>
                         </div>
 
-                        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
                           {monster.zone_name} • HP {monster.max_hp} • ATQ {monster.attack} • DEF {monster.defense}
                         </div>
 
@@ -395,11 +478,10 @@ export function CharacterHud({
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
-                            marginTop: '0.75rem',
-                            gap: '0.5rem',
+                            marginTop: '0.7rem',
                           }}
                         >
-                          <span style={{ fontSize: '0.78rem', color: '#9ca3af' }}>
+                          <span style={{ fontSize: '0.76rem', color: '#9ca3af' }}>
                             +{monster.xp_reward} XP • +{monster.spirit_stones_reward} Pedras
                           </span>
 
@@ -409,7 +491,7 @@ export function CharacterHud({
                             onClick={() => handleHunt(monster.id)}
                             style={{
                               minHeight: '38px',
-                              padding: '0 0.9rem',
+                              padding: '0 0.85rem',
                               borderRadius: '8px',
                               border: 'none',
                               background: canAfford ? 'var(--gold-primary)' : '#374151',
@@ -428,12 +510,11 @@ export function CharacterHud({
                 </div>
               )}
 
-              {/* Relatório da Última Batalha */}
               {lastBattle && (
                 <div
                   style={{
-                    marginTop: '0.5rem',
-                    padding: '0.9rem',
+                    marginTop: '0.4rem',
+                    padding: '0.85rem',
                     borderRadius: '12px',
                     background: 'var(--bg-void)',
                     border:
@@ -442,31 +523,34 @@ export function CharacterHud({
                         : '1px solid rgba(239, 68, 68, 0.45)',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <strong
-                      style={{
-                        color: lastBattle.outcome === 'victory' ? 'var(--jade-accent)' : '#fca5a5',
-                      }}
-                    >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                    <strong style={{ color: lastBattle.outcome === 'victory' ? 'var(--jade-accent)' : '#fca5a5' }}>
                       {lastBattle.outcome === 'victory' ? '🏆 Vitória em Combate!' : '💀 Derrota!'}
                     </strong>
-                    <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       {lastBattle.rounds} rodadas
                     </span>
                   </div>
 
                   {lastBattle.outcome === 'victory' && (
-                    <div style={{ fontSize: '0.82rem', color: 'var(--gold-primary)', marginBottom: '0.5rem' }}>
-                      Recompensas: +{lastBattle.xp_gained} XP • +{lastBattle.spirit_stones_gained} Pedras Espirituais
+                    <div style={{ fontSize: '0.8rem', color: 'var(--gold-primary)', marginBottom: '0.45rem' }}>
+                      +{lastBattle.xp_gained} XP • +{lastBattle.spirit_stones_gained} Pedras
+                      {lastBattle.items_dropped && lastBattle.items_dropped.length > 0 && (
+                        <div style={{ color: '#38bdf8', marginTop: '0.2rem' }}>
+                          🎁 Espólio:{' '}
+                          {lastBattle.items_dropped
+                            .map((d) => `${d.quantity}x ${d.name}`)
+                            .join(', ')}
+                        </div>
+                      )}
                     </div>
                   )}
 
                   <div
                     style={{
-                      maxHeight: '140px',
+                      maxHeight: '130px',
                       overflowY: 'auto',
-                      fontSize: '0.76rem',
-                      color: '#d1d5db',
+                      fontSize: '0.75rem',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '0.25rem',
@@ -489,6 +573,215 @@ export function CharacterHud({
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ABA 3: MOCHILA & EQUIPAMENTOS */}
+          {activeTab === 'bag' && (
+            <div className="form-stack">
+              <h3 style={{ fontSize: '1.15rem' }}>Mochila Espiritual</h3>
+
+              {isLoadingInventory ? (
+                <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>Abrindo anel espacial...</p>
+              ) : inventory.length === 0 ? (
+                <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>
+                  Sua mochila está vazia. Adquira equipamentos no Mercado ou cace bestas!
+                </p>
+              ) : (
+                <div className="form-stack">
+                  {inventory.map((entry) => {
+                    const { item } = entry;
+                    const rColor = RARITY_COLORS[item.rarity];
+
+                    return (
+                      <div
+                        key={entry.id}
+                        style={{
+                          background: 'var(--bg-void)',
+                          padding: '0.85rem',
+                          borderRadius: '12px',
+                          border: entry.is_equipped
+                            ? '1px solid var(--gold-primary)'
+                            : '1px solid rgba(255,255,255,0.08)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <strong style={{ color: rColor, fontSize: '0.94rem' }}>
+                            {item.name} {entry.quantity > 1 ? `(x${entry.quantity})` : ''}
+                          </strong>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                            {entry.is_equipped ? '✅ Equipado' : TYPE_LABELS[item.type]}
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: '0.76rem', color: 'var(--jade-accent)', marginTop: '0.2rem' }}>
+                          {formatItemStats(item)}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.65rem' }}>
+                          {item.type === 'consumable' ? (
+                            <button
+                              type="button"
+                              disabled={useItemMutation.isPending}
+                              onClick={() => {
+                                setToastMessage(null);
+                                useItemMutation.mutate(entry.id, {
+                                  onSuccess: (d) => setToastMessage(d.message),
+                                });
+                              }}
+                              style={{
+                                minHeight: '36px',
+                                padding: '0 0.85rem',
+                                borderRadius: '8px',
+                                border: 'none',
+                                background: 'var(--jade-accent)',
+                                color: '#090b10',
+                                fontWeight: 700,
+                                fontSize: '0.8rem',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Usar
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={equipMutation.isPending}
+                              onClick={() => {
+                                setToastMessage(null);
+                                equipMutation.mutate(entry.id, {
+                                  onSuccess: (d) => setToastMessage(d.message),
+                                });
+                              }}
+                              style={{
+                                minHeight: '36px',
+                                padding: '0 0.85rem',
+                                borderRadius: '8px',
+                                border: '1px solid var(--gold-primary)',
+                                background: entry.is_equipped ? 'transparent' : 'var(--gold-primary)',
+                                color: entry.is_equipped ? 'var(--gold-primary)' : '#090b10',
+                                fontWeight: 700,
+                                fontSize: '0.8rem',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {entry.is_equipped ? 'Desequipar' : `Equipar (Nv.${item.required_level})`}
+                            </button>
+                          )}
+
+                          {!entry.is_equipped && (
+                            <button
+                              type="button"
+                              disabled={sellMutation.isPending}
+                              onClick={() => {
+                                setToastMessage(null);
+                                sellMutation.mutate(entry.id, {
+                                  onSuccess: (d) => setToastMessage(d.message),
+                                });
+                              }}
+                              style={{
+                                minHeight: '36px',
+                                padding: '0 0.75rem',
+                                borderRadius: '8px',
+                                border: '1px solid rgba(255,255,255,0.12)',
+                                background: 'transparent',
+                                color: 'var(--text-muted)',
+                                fontSize: '0.78rem',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Vender (+{item.sell_price})
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ABA 4: MERCADO ESPIRITUAL */}
+          {activeTab === 'shop' && (
+            <div className="form-stack">
+              <h3 style={{ fontSize: '1.15rem' }}>Pavilhão de Tesouros</h3>
+
+              {isLoadingInventory ? (
+                <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>Carregando catálogo...</p>
+              ) : (
+                <div className="form-stack">
+                  {shopItems.map((item) => {
+                    const canBuy = character.spirit_stones >= item.buy_price;
+                    const rColor = RARITY_COLORS[item.rarity];
+
+                    return (
+                      <div
+                        key={item.id}
+                        style={{
+                          background: 'var(--bg-void)',
+                          padding: '0.85rem',
+                          borderRadius: '12px',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <strong style={{ color: rColor, fontSize: '0.94rem' }}>{item.name}</strong>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                            {TYPE_LABELS[item.type]} • Nv.{item.required_level}
+                          </span>
+                        </div>
+
+                        <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                          {item.description}
+                        </p>
+
+                        <div style={{ fontSize: '0.76rem', color: 'var(--jade-accent)', marginTop: '0.25rem' }}>
+                          {formatItemStats(item)}
+                        </div>
+
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginTop: '0.65rem',
+                          }}
+                        >
+                          <strong style={{ fontSize: '0.82rem', color: 'var(--gold-primary)' }}>
+                            {item.buy_price} Pedras Espirituais
+                          </strong>
+
+                          <button
+                            type="button"
+                            disabled={buyMutation.isPending || !canBuy}
+                            onClick={() => {
+                              setToastMessage(null);
+                              buyMutation.mutate(
+                                { item_id: item.id, quantity: 1 },
+                                { onSuccess: (d) => setToastMessage(d.message) }
+                              );
+                            }}
+                            style={{
+                              minHeight: '36px',
+                              padding: '0 0.85rem',
+                              borderRadius: '8px',
+                              border: 'none',
+                              background: canBuy ? 'var(--gold-primary)' : '#374151',
+                              color: canBuy ? '#090b10' : '#9ca3af',
+                              fontWeight: 700,
+                              fontSize: '0.8rem',
+                              cursor: canBuy ? 'pointer' : 'not-allowed',
+                            }}
+                          >
+                            Comprar
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

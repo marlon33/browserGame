@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CharacterController;
 use App\Http\Controllers\Api\GameplayController;
+use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\WorldController;
 use Illuminate\Support\Facades\Route;
 
@@ -31,4 +32,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/gameplay/meditate', [GameplayController::class, 'meditate']);
     Route::post('/gameplay/allocate-stat', [GameplayController::class, 'allocateStat']);
     Route::post('/gameplay/hunt', [GameplayController::class, 'hunt']);
+
+    // Inventário, Equipamentos & Mercado Espiritual
+    Route::get('/inventory', [InventoryController::class, 'index']);
+    Route::post('/inventory/buy', [InventoryController::class, 'buy']);
+    Route::post('/inventory/{characterItemId}/equip', [InventoryController::class, 'toggleEquip']);
+    Route::post('/inventory/{characterItemId}/use', [InventoryController::class, 'useItem']);
+    Route::post('/inventory/{characterItemId}/sell', [InventoryController::class, 'sell']);
 });

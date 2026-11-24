@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Monster extends Model
 {
@@ -19,4 +20,9 @@ class Monster extends Model
         'xp_reward',
         'spirit_stones_reward',
     ];
+
+    public function drops(): HasMany
+    {
+        return $this->hasMany(MonsterDrop::class);
+    }
 }
