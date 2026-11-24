@@ -121,12 +121,32 @@ export interface MonsterDropPreview {
   };
 }
 
+export interface MonsterMastery {
+  tier: number;
+  label: string;
+  damage_bonus_pct: number;
+  drop_bonus_pct: number;
+  next_target: number | null;
+}
+
+export interface MonsterBestiaryInfo {
+  kills_count: number;
+  mastery: MonsterMastery;
+  can_sweep: boolean;
+  boss_cooldown_until: string | null;
+  boss_cooldown_remaining: number;
+}
+
 export interface Monster {
   id: number;
   slug: string;
+  region_slug: string;
+  region_order: number;
   name: string;
   zone_name: string;
   recommended_level: number;
+  is_boss: boolean;
+  boss_cooldown_seconds: number;
   energy_cost: number;
   max_hp: number;
   attack: number;
@@ -134,15 +154,17 @@ export interface Monster {
   agility: number;
   xp_reward: number;
   spirit_stones_reward: number;
+  cultivation_qi_reward: number;
   drops?: MonsterDropPreview[];
+  bestiary?: MonsterBestiaryInfo;
 }
 
 export interface CombatLogEntry {
   round: number;
-  actor: 'player' | 'monster';
+  actor: 'player' | 'monster' | 'system';
   damage: number;
   crit: boolean;
-  target_hp: number;
+  target_hp?: number;
   text: string;
 }
 
@@ -155,15 +177,58 @@ export interface DroppedItemSummary {
 
 export interface HuntResult {
   outcome: 'victory' | 'defeat';
+  fights_completed: number;
   rounds: number;
   xp_gained: number;
   spirit_stones_gained: number;
+  qi_gained: number;
   items_dropped?: DroppedItemSummary[];
   levels_gained: number;
   rank_up_title: string | null;
   combat_log: CombatLogEntry[];
   battle_id: number;
+  bestiary?: {
+    monster_id: number;
+    kills_count: number;
+    mastery: MonsterMastery;
+    boss_cooldown_until: string | null;
+  };
   character: Character;
+}
+
+export type TacticalActionType = 'heal' | 'buff' | 'debuff' | 'physical' | 'magic' | 'pass';
+
+export interface ActiveBattle {
+  id: number;
+  character_id: number;
+  monster_id: number;
+  status: 'active' | 'victory' | 'defeat';
+  current_turn: 'player' | 'monster';
+  round: number;
+  player_hp: number;
+  player_max_hp: number;
+  monster_hp: number;
+  monster_max_hp: number;
+  turn_actions_used: {
+    heal?: boolean;
+    support?: boolean;
+  };
+  active_effects: {
+    player_buff_turns?: number;
+    monster_debuff_turns?: number;
+  };
+  combat_log: CombatLogEntry[];
+  rewards_summary?: {
+    outcome: 'victory' | 'defeat';
+    xp_gained: number;
+    spirit_stones_gained: number;
+    qi_gained: number;
+    levels_gained: number;
+    items_dropped: DroppedItemSummary[];
+  } | null;
+  turn_expires_at: string | null;
+  turn_remaining_seconds: number;
+  monster?: Monster;
 }
 
 export interface BattleHistoryEntry {
@@ -178,6 +243,7 @@ export interface BattleHistoryEntry {
     name: string;
     zone_name: string;
     recommended_level: number;
+    is_boss?: boolean;
   };
 }
 

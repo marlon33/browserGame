@@ -8,16 +8,11 @@ use App\Http\Controllers\Api\WorldController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
-    Route::middleware('throttle:10,1')->group(function () {
-        Route::post('/register', [AuthController::class, 'register']);
-        Route::post('/login', [AuthController::class, 'login']);
-        Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
-        Route::post('/reset-password', [AuthController::class, 'resetPassword']);
-    });
+    Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/login', [AuthController::class, 'login']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
-        Route::put('/password', [AuthController::class, 'updatePassword']);
         Route::post('/logout', [AuthController::class, 'logout']);
     });
 });
@@ -25,19 +20,28 @@ Route::prefix('auth')->group(function () {
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/world/bootstrap', [WorldController::class, 'bootstrap']);
     Route::post('/characters', [CharacterController::class, 'store']);
-    Route::get('/characters/active', [CharacterController::class, 'active']);
+    Route::get('/characters/{character}', [CharacterController::class, 'show']);
 
-    // Loop Principal: Cultivo, Atributos & Caça PvE
-    Route::get('/gameplay/monsters', [GameplayController::class, 'monsters']);
-    Route::get('/gameplay/history', [GameplayController::class, 'battleHistory']);
-    Route::post('/gameplay/meditate', [GameplayController::class, 'meditate']);
-    Route::post('/gameplay/allocate-stat', [GameplayController::class, 'allocateStat']);
-    Route::post('/gameplay/hunt', [GameplayController::class, 'hunt']);
+    Route::prefix('gameplay')->group(function () {
+        Route::get('/monsters', [GameplayController::class, 'monsters']);
+        Route::get('/history', [GameplayController::class, 'battleHistory']);
+        Route::post('/meditate', [GameplayController::class, 'meditate']);
+        Route::post('/allocate-stat', [GameplayController::class, 'allocateStat']);
+        Route::post('/hunt', [GameplayController::class, 'hunt']);
 
-    // Inventário, Equipamentos & Mercado Espiritual
-    Route::get('/inventory', [InventoryController::class, 'index']);
-    Route::post('/inventory/buy', [InventoryController::class, 'buy']);
-    Route::post('/inventory/{characterItemId}/equip', [InventoryController::class, 'toggleEquip']);
-    Route::post('/inventory/{characterItemId}/use', [InventoryController::class, 'useItem']);
-    Route::post('/inventory/{characterItemId}/sell', [InventoryController::class, 'sell']);
+        // Combate Tático por Turnos
+        Route::get('/battle/active', [GameplayController::class, 'activeBattle']);
+        Route::post('/battle/start', [GameplayController::class, 'startTacticalBattle']);
+        Route::post('/battle/action', [GameplayController::class, 'tacticalAction']);
+        Route::post('/battle/monster-turn', [GameplayController::class, 'tacticalMonsterTurn']);
+    });
+
+    Route::prefix('inventory')->group(function () {
+        Route::get('/shop', [InventoryController::class, 'shop']);
+        Route::get('/', [InventoryController::class, 'index']);
+        Route::post('/buy', [InventoryController::class, 'buy']);
+        Route::post('/equip', [InventoryController::class, 'equip']);
+        Route::post('/use', [InventoryController::class, 'useItem']);
+        Route::post('/sell', [InventoryController::class, 'sell']);
+    });
 });

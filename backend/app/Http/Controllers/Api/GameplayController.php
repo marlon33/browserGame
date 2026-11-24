@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActiveBattle;
 use App\Models\BattleLog;
 use App\Models\Character;
+use App\Models\CharacterMonsterStat;
 use App\Models\Monster;
 use App\Services\CombatEngineService;
+use App\Services\TacticalCombatService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -35,14 +38,46 @@ class GameplayController extends Controller
         return $character;
     }
 
-    public function monsters(): JsonResponse
+    public function monsters(Request $request): JsonResponse
     {
+        $character = $this->resolveCharacter($request);
+
         $monsters = Monster::with(['drops.item:id,name,rarity,type'])
+            ->orderBy('region_order')
             ->orderBy('recommended_level')
+            ->orderBy('is_boss')
             ->get();
 
+        $statsMap = CharacterMonsterStat::where('character_id', $character->id)
+            ->get()
+            ->keyBy('monster_id');
+
+        $enriched = $monsters->map(function (Monster $m) use ($statsMap) {
+            $stat = $statsMap->get($m->id);
+            $kills = $stat?->kills_count ?? 0;
+            $mastery = $stat
+                ? $stat->masteryTier()
+                : ['tier' => 0, 'label' => 'Novato', 'damage_bonus_pct' => 0, 'drop_bonus_pct' => 0, 'next_target' => 10];
+
+            $cooldownRemaining = 0;
+            if ($stat && $stat->boss_cooldown_until && $stat->boss_cooldown_until->isFuture()) {
+                $cooldownRemaining = (int) now()->diffInSeconds($stat->boss_cooldown_until);
+            }
+
+            $arr = $m->toArray();
+            $arr['bestiary'] = [
+                'kills_count' => $kills,
+                'mastery' => $mastery,
+                'can_sweep' => ! $m->is_boss && $kills >= 3,
+                'boss_cooldown_until' => $stat?->boss_cooldown_until?->toIso8601String(),
+                'boss_cooldown_remaining' => $cooldownRemaining,
+            ];
+
+            return $arr;
+        });
+
         return response()->json([
-            'monsters' => $monsters,
+            'monsters' => $enriched,
         ]);
     }
 
@@ -50,7 +85,7 @@ class GameplayController extends Controller
     {
         $character = $this->resolveCharacter($request);
 
-        $logs = BattleLog::with('monster:id,name,zone_name,recommended_level')
+        $logs = BattleLog::with('monster:id,name,zone_name,recommended_level,is_boss')
             ->where('character_id', $character->id)
             ->orderByDesc('id')
             ->limit(10)
@@ -61,14 +96,6 @@ class GameplayController extends Controller
         ]);
     }
 
-    /**
-     * Meditação de Refino Espiritual:
-     * - Consome Pedras Espirituais (stones_spent: 1..25)
-     * - Consome Energia escalável: 4 + (pedras * 2) + floor(nível * 0.5)
-     * - Aplica Cooldown escalável: (pedras * 5s) + (nível * 2s)
-     * - Acumula Fadiga de Meditação (+12% + pedras * 2%), reduzindo eficiência
-     * - Concede exclusivamente Qi de Cultivo (cultivation_xp) para Patente + cura HP
-     */
     public function meditate(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -87,7 +114,6 @@ class GameplayController extends Controller
 
             $char->syncLazyResources();
 
-            // 1. Verifica Cooldown
             if ($char->meditation_cooldown_until && $char->meditation_cooldown_until->isFuture()) {
                 $secs = (int) now()->diffInSeconds($char->meditation_cooldown_until);
                 throw ValidationException::withMessages([
@@ -95,14 +121,12 @@ class GameplayController extends Controller
                 ]);
             }
 
-            // 2. Verifica Saturação por Fadiga
             if ($char->meditation_fatigue >= 85) {
                 throw ValidationException::withMessages([
                     'fatigue' => ["Fadiga espiritual crítica ({$char->meditation_fatigue}%). Aguarde sua mente descansar antes de refinar mais Qi."],
                 ]);
             }
 
-            // 3. Calcula custos escaláveis por pedras + nível
             $energyCost = 4 + ($stonesToSpend * 2) + (int) floor($char->level * 0.5);
             $cooldownSeconds = ($stonesToSpend * 5) + ($char->level * 2);
 
@@ -118,14 +142,12 @@ class GameplayController extends Controller
                 ]);
             }
 
-            // 4. Calcula eficiência com base na fadiga atual
             $efficiencyPct = max(20, 100 - (int) $char->meditation_fatigue);
             $xpMult = $char->server->xp_multiplier ?? 1.0;
 
             $rawQi = $stonesToSpend * (32 + ($char->level * 4));
             $qiGained = max(5, (int) round($rawQi * ($efficiencyPct / 100) * $xpMult));
 
-            // 5. Deduz recursos e aplica cooldown + fadiga
             $char->spirit_stones -= $stonesToSpend;
             $char->energy -= $energyCost;
             $char->meditation_cooldown_until = now()->addSeconds($cooldownSeconds);
@@ -136,13 +158,11 @@ class GameplayController extends Controller
                 $char->last_fatigue_sync_at = now();
             }
 
-            // Cura proporcional ao lote refinado (20% + 3% por pedra, máx 50%)
             $effectiveMaxHp = $char->effective_stats['max_hp'];
             $healPct = min(0.50, 0.20 + ($stonesToSpend * 0.03));
             $healedHp = (int) round($effectiveMaxHp * $healPct);
             $char->hp = min($effectiveMaxHp, $char->hp + $healedHp);
 
-            // Concede Qi de Cultivo (Patente) - NÃO mexe no level!
             $rankUpTitle = $char->grantCultivationXp($qiGained);
             $char->last_active_at = now();
             $char->save();
@@ -204,7 +224,46 @@ class GameplayController extends Controller
         });
     }
 
+    /**
+     * Varredura rápida (x3) para monstros já dominados
+     */
     public function hunt(Request $request, CombatEngineService $combatEngine): JsonResponse
+    {
+        $validated = $request->validate([
+            'monster_id' => ['required', 'integer', 'exists:monsters,id'],
+            'times' => ['nullable', 'integer', 'min:1', 'max:3'],
+        ]);
+
+        $character = $this->resolveCharacter($request);
+        $monster = Monster::findOrFail($validated['monster_id']);
+        $times = $validated['times'] ?? 1;
+
+        $result = $combatEngine->fightMonster($character, $monster, $times);
+
+        return response()->json($result);
+    }
+
+    /**
+     * Retorna a batalha tática ativa (caso o jogador recarregue a página no meio do combate)
+     */
+    public function activeBattle(Request $request): JsonResponse
+    {
+        $character = $this->resolveCharacter($request);
+
+        $battle = ActiveBattle::with('monster.drops.item')
+            ->where('character_id', $character->id)
+            ->where('status', 'active')
+            ->first();
+
+        return response()->json([
+            'battle' => $battle,
+        ]);
+    }
+
+    /**
+     * Inicia uma batalha tática por turnos contra o monstro selecionado
+     */
+    public function startTacticalBattle(Request $request, TacticalCombatService $tacticalService): JsonResponse
     {
         $validated = $request->validate([
             'monster_id' => ['required', 'integer', 'exists:monsters,id'],
@@ -213,7 +272,50 @@ class GameplayController extends Controller
         $character = $this->resolveCharacter($request);
         $monster = Monster::findOrFail($validated['monster_id']);
 
-        $result = $combatEngine->fightMonster($character, $monster);
+        $battle = $tacticalService->startBattle($character, $monster);
+        $character->refresh()->load(['server', 'realm', 'cultivationRank']);
+
+        return response()->json([
+            'battle' => $battle,
+            'character' => $character,
+        ]);
+    }
+
+    /**
+     * Executa ação do jogador no turno (heal, buff, debuff, physical, magic, pass)
+     */
+    public function tacticalAction(Request $request, TacticalCombatService $tacticalService): JsonResponse
+    {
+        $validated = $request->validate([
+            'battle_id' => ['required', 'integer', 'exists:active_battles,id'],
+            'action' => ['required', 'string', Rule::in(['heal', 'buff', 'debuff', 'physical', 'magic', 'pass'])],
+        ]);
+
+        $character = $this->resolveCharacter($request);
+        $battle = ActiveBattle::where('id', $validated['battle_id'])
+            ->where('character_id', $character->id)
+            ->firstOrFail();
+
+        $result = $tacticalService->performPlayerAction($character, $battle, $validated['action']);
+
+        return response()->json($result);
+    }
+
+    /**
+     * Executa o turno do monstro (após os 3s) e devolve a vez ao jogador
+     */
+    public function tacticalMonsterTurn(Request $request, TacticalCombatService $tacticalService): JsonResponse
+    {
+        $validated = $request->validate([
+            'battle_id' => ['required', 'integer', 'exists:active_battles,id'],
+        ]);
+
+        $character = $this->resolveCharacter($request);
+        $battle = ActiveBattle::where('id', $validated['battle_id'])
+            ->where('character_id', $character->id)
+            ->firstOrFail();
+
+        $result = $tacticalService->executeMonsterTurn($character, $battle);
 
         return response()->json($result);
     }

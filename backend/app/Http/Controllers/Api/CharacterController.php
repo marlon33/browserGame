@@ -143,4 +143,35 @@ class CharacterController extends Controller
             'character' => $character,
         ]);
     }
+
+    public function show(Request $request, string $character): JsonResponse
+    {
+        $characterId = $character === 'active'
+            ? $request->header('X-Character-Id')
+            : $character;
+
+        if (! $characterId) {
+            return response()->json([
+                'message' => 'Personagem ativo não informado.',
+            ], 400);
+        }
+
+        $char = Character::with(['server', 'realm', 'cultivationRank'])
+            ->where('id', $characterId)
+            ->where('user_id', $request->user()->id)
+            ->first();
+
+        if (! $char) {
+            return response()->json([
+                'message' => 'Personagem não encontrado ou não pertence à sua conta.',
+            ], 404);
+        }
+
+        $char->syncLazyResources();
+        $char->load(['server', 'realm', 'cultivationRank']);
+
+        return response()->json([
+            'character' => $char,
+        ]);
+    }
 }

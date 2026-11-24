@@ -3,7 +3,8 @@ import { useGameplay, type StatKey } from '@/hooks/useGameplay';
 import { useInventory } from '@/hooks/useInventory';
 import { getErrorMessage } from '@/utils/getErrorMessage';
 import { Toast, type ToastData } from '@/components/ui/Toast';
-import type { Character, HuntResult, Item } from '@/types/game';
+import { HuntArena } from '@/components/game/HuntArena';
+import type { Character, HuntResult, Item, TacticalActionType } from '@/types/game';
 
 interface CharacterHudProps {
   character: Character;
@@ -61,10 +62,21 @@ export function CharacterHud({
     monsters,
     isLoadingMonsters,
     battleHistory,
+    activeBattle,
     meditateMutation,
     allocateStatMutation,
     huntMutation,
+    startBattleMutation,
+    tacticalActionMutation,
+    tacticalMonsterTurnMutation,
   } = useGameplay(character.id);
+
+  // Se houver uma batalha ativa ao carregar a página, abre direto na aba Caça
+  useEffect(() => {
+    if (activeBattle && activeBattle.status === 'active') {
+      setActiveTab('hunt');
+    }
+  }, [activeBattle]);
 
   const {
     shopItems,
@@ -76,7 +88,6 @@ export function CharacterHud({
     sellMutation,
   } = useInventory(character.id);
 
-  // Sincroniza cronômetro regressivo de cooldown da meditação
   useEffect(() => {
     const until = character.meditation_status?.cooldown_until;
     if (!until) {
@@ -105,7 +116,6 @@ export function CharacterHud({
   const xpRequired = character.next_level_xp ?? Math.round(100 * Math.pow(character.level, 1.45));
   const xpPercent = Math.min(100, Math.round((character.experience / Math.max(1, xpRequired)) * 100));
 
-  // Progresso da Patente (Qi de Cultivo)
   const currentRankBase = character.cultivation_rank?.required_xp ?? 0;
   const nextRankTarget = character.next_rank_info?.required_xp ?? null;
   const cultivationXp = character.cultivation_xp ?? 0;
@@ -121,7 +131,6 @@ export function CharacterHud({
       )
     : 100;
 
-  // Cálculos de pré-visualização da Meditação
   const fatiguePct = character.meditation_status?.fatigue_pct ?? 0;
   const efficiencyPct = character.meditation_status?.efficiency_pct ?? 100;
   const isSaturated = character.meditation_status?.is_saturated ?? false;
@@ -192,16 +201,86 @@ export function CharacterHud({
     );
   };
 
-  const handleHunt = (monsterId: number) => {
-    huntMutation.mutate(monsterId, {
-      onSuccess: (result) => {
-        setLastBattle(result);
-        if (result.levels_gained > 0) {
-          showToast('success', `🎉 Vitória! Você avançou para o Nível ${result.character.level}!`);
-        } else if (result.outcome === 'victory') {
-          showToast('success', `🏆 Vitória! +${result.xp_gained} XP de Combate e +${result.spirit_stones_gained} Pedras.`);
-        } else {
-          showToast('error', '💀 Você foi derrotado! Recupere seu HP antes de caçar novamente.');
+  const handleSweepHunt = (monsterId: number, times: number = 1) => {
+    huntMutation.mutate(
+      { monsterId, times },
+      {
+        onSuccess: (result) => {
+          setLastBattle(result);
+          if (result.levels_gained > 0) {
+            showToast('success', `🎉 Vitória! Você avançou para o Nível ${result.character.level}!`);
+          } else if (result.outcome === 'victory') {
+            showToast(
+              'success',
+              `🏆 Varredura (${result.fights_completed}x)! +${result.xp_gained} XP e +${result.spirit_stones_gained} Pedras.`
+            );
+          } else {
+            showToast('error', '💀 Você foi derrotado! Recupere seu HP antes de caçar novamente.');
+          }
+        },
+        onError: (err) => showToast('error', getErrorMessage(err)),
+      }
+    );
+  };
+
+  const handleStartTacticalBattle = (monsterId: number) => {
+    startBattleMutation.mutate(monsterId, {
+      onError: (err) => showToast('error', getErrorMessage(err)),
+    });
+  };
+
+  const handleTacticalAction = (battleId: number, action: TacticalActionType) => {
+    tacticalActionMutation.mutate(
+      { battleId, action },
+      {
+        onSuccess: ({ battle, character: updatedChar }) => {
+          if (battle.status === 'victory' && battle.rewards_summary) {
+            const rw = battle.rewards_summary;
+            setLastBattle({
+              outcome: 'victory',
+              fights_completed: 1,
+              rounds: battle.round,
+              xp_gained: rw.xp_gained,
+              spirit_stones_gained: rw.spirit_stones_gained,
+              qi_gained: rw.qi_gained,
+              items_dropped: rw.items_dropped,
+              levels_gained: rw.levels_gained,
+              rank_up_title: null,
+              combat_log: battle.combat_log,
+              battle_id: battle.id,
+              character: updatedChar,
+            });
+            showToast(
+              'success',
+              rw.levels_gained > 0
+                ? `🎉 Vitória e Level Up! Você alcançou o Nível ${updatedChar.level}!`
+                : `🏆 Vitória! +${rw.xp_gained} XP e +${rw.spirit_stones_gained} Pedras.`
+            );
+          }
+        },
+        onError: (err) => showToast('error', getErrorMessage(err)),
+      }
+    );
+  };
+
+  const handleTacticalMonsterTurn = (battleId: number) => {
+    tacticalMonsterTurnMutation.mutate(battleId, {
+      onSuccess: ({ battle, character: updatedChar }) => {
+        if (battle.status === 'defeat') {
+          setLastBattle({
+            outcome: 'defeat',
+            fights_completed: 1,
+            rounds: battle.round,
+            xp_gained: 0,
+            spirit_stones_gained: 0,
+            qi_gained: 0,
+            levels_gained: 0,
+            rank_up_title: null,
+            combat_log: battle.combat_log,
+            battle_id: battle.id,
+            character: updatedChar,
+          });
+          showToast('error', '💀 Você caiu em combate! Recupere sua vitalidade.');
         }
       },
       onError: (err) => showToast('error', getErrorMessage(err)),
@@ -235,7 +314,7 @@ export function CharacterHud({
       label: 'Poder Espiritual',
       total: eff?.spirit_power ?? character.spirit_power,
       bonus: eff?.bonus_spirit_power ?? 0,
-      desc: 'Dano espiritual',
+      desc: 'Magia & cura',
     },
   ];
 
@@ -611,7 +690,7 @@ export function CharacterHud({
             </button>
           </div>
 
-          {/* ABA 1: CULTIVO DE PATENTE (REFINO DE PEDRAS + COOLDOWN + FADIGA) */}
+          {/* ABA 1: CULTIVO DE PATENTE */}
           {activeTab === 'cultivate' && (
             <div className="form-stack">
               <h3 style={{ fontSize: '1.15rem' }}>Câmara de Refino Espiritual</h3>
@@ -620,7 +699,6 @@ export function CharacterHud({
                 <strong>Patente do Reino</strong> (multiplicador de atributos). O nível de combate evolui apenas na Caça.
               </p>
 
-              {/* Barra de Fadiga Espiritual */}
               <div
                 style={{
                   background: 'var(--bg-void)',
@@ -654,7 +732,6 @@ export function CharacterHud({
                 </div>
               </div>
 
-              {/* Seletor de Lote de Pedras */}
               <div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
                   Quantidade de Pedras para Refinar:
@@ -687,7 +764,6 @@ export function CharacterHud({
                 </div>
               </div>
 
-              {/* Resumo de Custo vs Retorno */}
               <div
                 style={{
                   background: 'var(--bg-void)',
@@ -768,173 +844,27 @@ export function CharacterHud({
             </div>
           )}
 
-          {/* ABA 2: CAÇA PVE COM PREVIEW DE DROPS E DIFICULDADE */}
+          {/* ABA 2: ARENA DE COMBATE TÁTICO */}
           {activeTab === 'hunt' && (
-            <div className="form-stack">
-              <h3 style={{ fontSize: '1.15rem' }}>Territórios de Caça</h3>
-
-              {isLoadingMonsters ? (
-                <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>Rastreando bestas...</p>
-              ) : (
-                <div className="form-stack">
-                  {monsters.map((monster) => {
-                    const canAfford = character.energy >= monster.energy_cost && character.hp > 0;
-                    const levelDiff = monster.recommended_level - character.level;
-                    const diffBadge =
-                      levelDiff <= 0
-                        ? { label: 'Fácil', color: 'var(--jade-accent)' }
-                        : levelDiff <= 2
-                        ? { label: 'Equilibrado', color: '#fbbf24' }
-                        : { label: 'Perigoso', color: '#f87171' };
-
-                    return (
-                      <div
-                        key={monster.id}
-                        style={{
-                          background: 'var(--bg-void)',
-                          padding: '0.85rem',
-                          borderRadius: '12px',
-                          border: '1px solid rgba(255,255,255,0.08)',
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
-                          <strong style={{ fontSize: '0.94rem' }}>{monster.name}</strong>
-                          <span style={{ fontSize: '0.72rem', color: diffBadge.color, fontWeight: 700 }}>
-                            Nv.{monster.recommended_level} • {diffBadge.label}
-                          </span>
-                        </div>
-
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                          {monster.zone_name} • HP {monster.max_hp} • ATQ {monster.attack} • DEF {monster.defense}
-                        </div>
-
-                        {monster.drops && monster.drops.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.45rem' }}>
-                            {monster.drops.map((d) =>
-                              d.item ? (
-                                <span
-                                  key={d.id}
-                                  style={{
-                                    fontSize: '0.68rem',
-                                    padding: '0.12rem 0.45rem',
-                                    borderRadius: '6px',
-                                    background: 'rgba(255,255,255,0.05)',
-                                    color: RARITY_COLORS[d.item.rarity],
-                                  }}
-                                >
-                                  🎁 {d.item.name} ({d.drop_chance_pct}%)
-                                </span>
-                              ) : null
-                            )}
-                          </div>
-                        )}
-
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginTop: '0.7rem',
-                          }}
-                        >
-                          <span style={{ fontSize: '0.76rem', color: '#9ca3af' }}>
-                            +{monster.xp_reward} XP • +{monster.spirit_stones_reward} Pedras
-                          </span>
-
-                          <button
-                            type="button"
-                            disabled={huntMutation.isPending || !canAfford}
-                            onClick={() => handleHunt(monster.id)}
-                            style={{
-                              minHeight: '38px',
-                              padding: '0 0.85rem',
-                              borderRadius: '8px',
-                              border: 'none',
-                              background: canAfford ? 'var(--gold-primary)' : '#374151',
-                              color: canAfford ? '#090b10' : '#9ca3af',
-                              fontWeight: 700,
-                              fontSize: '0.82rem',
-                              cursor: canAfford ? 'pointer' : 'not-allowed',
-                            }}
-                          >
-                            Caçar (-{monster.energy_cost}⚡)
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {lastBattle && (
-                <div
-                  style={{
-                    marginTop: '0.4rem',
-                    padding: '0.85rem',
-                    borderRadius: '12px',
-                    background: 'var(--bg-void)',
-                    border:
-                      lastBattle.outcome === 'victory'
-                        ? '1px solid rgba(16, 185, 129, 0.45)'
-                        : '1px solid rgba(239, 68, 68, 0.45)',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                    <strong style={{ color: lastBattle.outcome === 'victory' ? 'var(--jade-accent)' : '#fca5a5' }}>
-                      {lastBattle.outcome === 'victory' ? '🏆 Vitória em Combate!' : '💀 Derrota!'}
-                    </strong>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      {lastBattle.rounds} rodadas
-                    </span>
-                  </div>
-
-                  {lastBattle.outcome === 'victory' && (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--gold-primary)', marginBottom: '0.45rem' }}>
-                      +{lastBattle.xp_gained} XP • +{lastBattle.spirit_stones_gained} Pedras
-                      {lastBattle.items_dropped && lastBattle.items_dropped.length > 0 && (
-                        <div style={{ color: '#38bdf8', marginTop: '0.2rem' }}>
-                          🎁 Espólio:{' '}
-                          {lastBattle.items_dropped
-                            .map((d) => `${d.quantity}x ${d.name}`)
-                            .join(', ')}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div
-                    style={{
-                      maxHeight: '130px',
-                      overflowY: 'auto',
-                      fontSize: '0.75rem',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.25rem',
-                      paddingTop: '0.4rem',
-                      borderTop: '1px solid rgba(255,255,255,0.06)',
-                    }}
-                  >
-                    {lastBattle.combat_log.map((entry, idx) => (
-                      <div
-                        key={idx}
-                        style={{
-                          color: entry.crit
-                            ? '#fbbf24'
-                            : entry.actor === 'monster'
-                            ? '#fca5a5'
-                            : '#d1d5db',
-                        }}
-                      >
-                        {entry.text}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <HuntArena
+              character={character}
+              monsters={monsters}
+              isLoadingMonsters={isLoadingMonsters}
+              isHunting={huntMutation.isPending}
+              lastBattle={lastBattle}
+              activeBattle={activeBattle}
+              isStartingBattle={startBattleMutation.isPending}
+              isExecutingAction={
+                tacticalActionMutation.isPending || tacticalMonsterTurnMutation.isPending
+              }
+              onStartTacticalBattle={handleStartTacticalBattle}
+              onTacticalAction={handleTacticalAction}
+              onTacticalMonsterTurn={handleTacticalMonsterTurn}
+              onSweepHunt={handleSweepHunt}
+            />
           )}
 
-          {/* ABA 3: MOCHILA COM SLOTS EQUIPADOS & FILTROS */}
+          {/* ABA 3: MOCHILA */}
           {activeTab === 'bag' && (
             <div className="form-stack">
               <h3 style={{ fontSize: '1.15rem' }}>Equipamentos Ativos</h3>
@@ -1143,7 +1073,7 @@ export function CharacterHud({
             </div>
           )}
 
-          {/* ABA 4: MERCADO COM FILTROS & COMPRA EM LOTE */}
+          {/* ABA 4: MERCADO */}
           {activeTab === 'shop' && (
             <div className="form-stack">
               <h3 style={{ fontSize: '1.15rem' }}>Pavilhão de Tesouros</h3>
