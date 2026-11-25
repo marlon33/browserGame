@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { getErrorMessage } from '@/utils/getErrorMessage';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 type AuthView = 'login' | 'register' | 'forgot' | 'reset';
 
@@ -118,6 +119,9 @@ export function AuthScreen() {
       {/* Painel de Formulário */}
       <main className="auth-main">
         <div className="auth-card">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.6rem' }}>
+            <LanguageSwitcher />
+          </div>
           {(view === 'login' || view === 'register') && (
             <div className="auth-tabs" role="tablist">
               <button

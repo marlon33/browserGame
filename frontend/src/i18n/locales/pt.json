@@ -1,0 +1,110 @@
+{
+  "common": {
+    "level": "Nível",
+    "levelShort": "Nv.{{level}}",
+    "servers": "Servidores",
+    "logout": "Sair",
+    "spiritStones": "Pedras Espirituais",
+    "jadeTokens": "Jades Celestiais",
+    "stonesShort": "Pedras",
+    "jadesShort": "Jades",
+    "energy": "Energia (+1 / 3min)",
+    "hp": "Vitalidade (HP)",
+    "combatXp": "XP de Nível (Combate)",
+    "rankQi": "Qi de Patente ({{rank}})",
+    "max": "MÁX"
+  },
+  "tabs": {
+    "cultivate": "🧘 Cultivo",
+    "hunt": "⚔️ Caça",
+    "quests": "📜 Missões",
+    "bag": "🎒 Mochila",
+    "shop": "🏛️ Mercado"
+  },
+  "stats": {
+    "title": "Atributos",
+    "freePoints": "+{{count}} pts livres",
+    "attack": "Ataque",
+    "defense": "Defesa",
+    "crit": "Crítico",
+    "strength": "Força",
+    "strengthDesc": "Dano físico",
+    "agility": "Agilidade",
+    "agilityDesc": "Crítico & iniciativa",
+    "constitution": "Constituição",
+    "constitutionDesc": "+12 HP & defesa",
+    "spirit_power": "Poder Espiritual",
+    "spirit_powerDesc": "Magia & cura"
+  },
+  "cultivate": {
+    "title": "Câmara de Refino Espiritual",
+    "description": "Refine Pedras Espirituais para absorver Qi de Cultivo e ascender sua Patente do Reino. O nível de combate evolui apenas na Caça.",
+    "fatigue": "Fadiga Mental (-1% / 2min)",
+    "efficiency": "Eficiência {{pct}}%",
+    "stonesAmountLabel": "Quantidade de Pedras para Refinar:",
+    "stoneUnit_one": "{{count}} Pedra",
+    "stoneUnit_other": "{{count}} Pedras",
+    "costStones": "Custo Pedras:",
+    "costEnergy": "Custo Energia:",
+    "cooldown": "Cooldown:",
+    "qiGain": "Ganho Qi:",
+    "btnMeditate": "Meditar & Refinar (-{{stones}} Pedras | -{{energy}}⚡)",
+    "btnMeditating": "Refinando Pedras Espirituais...",
+    "btnCooldown": "Estabilizando Meridianos ({{seconds}}s)",
+    "btnSaturated": "Fadiga Crítica (Aguarde Descanso)",
+    "btnNoStones": "Pedras Insuficientes ({{stones}})",
+    "btnNoEnergy": "Energia Insuficiente ({{energy}}⚡)",
+    "recentHistory": "Últimas Expedições"
+  },
+  "hunt": {
+    "title": "Territórios de Caça & Chefes",
+    "subtitle": "Selecione uma besta para inspecionar e iniciar combate tático",
+    "allRegions": "Todas as Regiões",
+    "bossBadge": "CHEFE DE ZONA",
+    "easy": "Fácil",
+    "balanced": "Equilibrado",
+    "dangerous": "Perigoso",
+    "bestiary": "Bestiário: {{count}} abate",
+    "bestiary_other": "Bestiário: {{count}} abates",
+    "sweepBtn": "Varredura x3 (-{{energy}}⚡)",
+    "inspectBtn": "🔍 Enfrentar",
+    "cooldownBtn": "Recarga ({{time}})",
+    "backToRegions": "← Voltar aos Territórios",
+    "possibleDrops": "Espólios Possíveis:",
+    "attackEnemyBtn": "⚔️ Atacar Inimigo (-{{energy}}⚡)"
+  },
+  "quests": {
+    "title": "Pergaminhos & Missões Diárias",
+    "resetNote": "Missões diárias renovam todo dia",
+    "filterAll": "Todas",
+    "filterDaily": "☀️ Diárias",
+    "filterStory": "📜 Principais",
+    "progress": "Progresso",
+    "claimed": "✅ Recompensa Resgatada",
+    "claimBtn": "🎁 Resgatar Recompensa",
+    "travelBtn": "🗺️ Viajar até a Região"
+  },
+  "bag": {
+    "title": "Equipamentos Ativos",
+    "emptySlot": "Vazio",
+    "unequip": "Remover",
+    "use": "Usar",
+    "equip": "Equipar (Nv.{{level}})",
+    "sell": "Vender (+{{price}})",
+    "filterAll": "Todos",
+    "filterWeapon": "Armas",
+    "filterArmor": "Armaduras",
+    "filterAccessory": "Acessórios",
+    "filterConsumable": "Pílulas"
+  },
+  "shop": {
+    "title": "Pavilhão de Tesouros",
+    "buyOne": "Comprar x1"
+  },
+  "db": {
+    "monsters": {},
+    "items": {},
+    "quests": {},
+    "realms": {}
+  }
+}

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import i18n from '@/i18n';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
@@ -10,7 +11,7 @@ export const api = axios.create({
   },
 });
 
-// Injeta automaticamente Token, Servidor e Personagem ativo em todas as chamadas
+// Injeta automaticamente Token, Servidor, Personagem ativo e Idioma em todas as chamadas
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('rpg_token');
   const serverId = localStorage.getItem('rpg_server_id');
@@ -25,6 +26,9 @@ api.interceptors.request.use((config) => {
   if (characterId) {
     config.headers['X-Character-Id'] = characterId;
   }
+
+  const currentLang = (i18n.resolvedLanguage || i18n.language || 'pt').slice(0, 2);
+  config.headers['Accept-Language'] = currentLang;
 
   return config;
 });

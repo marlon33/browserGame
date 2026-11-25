@@ -3,6 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useWorld } from '@/hooks/useWorld';
 import { getErrorMessage } from '@/utils/getErrorMessage';
 import type { Character, Realm } from '@/types/game';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 interface AccountLobbyProps {
   onEnterWorld: (character: Character) => void;
@@ -106,6 +107,7 @@ export function AccountLobby({ onEnterWorld }: AccountLobbyProps) {
       <header className="topbar">
         <span className="topbar-brand">⚔️ Ascensão dos Dois Reinos</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <LanguageSwitcher />
           <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>
             {user?.name}
           </span>

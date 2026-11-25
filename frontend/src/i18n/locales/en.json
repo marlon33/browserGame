@@ -1,0 +1,176 @@
+{
+  "common": {
+    "level": "Level",
+    "levelShort": "Lv.{{level}}",
+    "servers": "Servers",
+    "logout": "Logout",
+    "spiritStones": "Spirit Stones",
+    "jadeTokens": "Celestial Jades",
+    "stonesShort": "Stones",
+    "jadesShort": "Jades",
+    "energy": "Energy (+1 / 3min)",
+    "hp": "Vitality (HP)",
+    "combatXp": "Combat Level XP",
+    "rankQi": "Rank Qi ({{rank}})",
+    "max": "MAX"
+  },
+  "tabs": {
+    "cultivate": "🧘 Cultivate",
+    "hunt": "⚔️ Hunt",
+    "quests": "📜 Quests",
+    "bag": "🎒 Bag",
+    "shop": "🏛️ Market"
+  },
+  "stats": {
+    "title": "Attributes",
+    "freePoints": "+{{count}} free pts",
+    "attack": "Attack",
+    "defense": "Defense",
+    "crit": "Crit",
+    "strength": "Strength",
+    "strengthDesc": "Physical damage",
+    "agility": "Agility",
+    "agilityDesc": "Crit & initiative",
+    "constitution": "Constitution",
+    "constitutionDesc": "+12 HP & defense",
+    "spirit_power": "Spirit Power",
+    "spirit_powerDesc": "Magic & healing"
+  },
+  "cultivate": {
+    "title": "Spiritual Refinement Chamber",
+    "description": "Refine Spirit Stones to absorb Cultivation Qi and ascend your Realm Rank. Combat level progresses exclusively through Hunting.",
+    "fatigue": "Mental Fatigue (-1% / 2min)",
+    "efficiency": "Efficiency {{pct}}%",
+    "stonesAmountLabel": "Spirit Stones to Refine:",
+    "stoneUnit_one": "{{count}} Stone",
+    "stoneUnit_other": "{{count}} Stones",
+    "costStones": "Stones Cost:",
+    "costEnergy": "Energy Cost:",
+    "cooldown": "Cooldown:",
+    "qiGain": "Qi Gain:",
+    "btnMeditate": "Meditate & Refine (-{{stones}} Stones | -{{energy}}⚡)",
+    "btnMeditating": "Refining Spirit Stones...",
+    "btnCooldown": "Stabilizing Meridians ({{seconds}}s)",
+    "btnSaturated": "Critical Fatigue (Rest Required)",
+    "btnNoStones": "Not Enough Stones ({{stones}})",
+    "btnNoEnergy": "Not Enough Energy ({{energy}}⚡)",
+    "recentHistory": "Recent Expeditions"
+  },
+  "hunt": {
+    "title": "Hunting Grounds & Bosses",
+    "subtitle": "Select a beast to inspect stats and enter tactical combat",
+    "allRegions": "All Regions",
+    "bossBadge": "ZONE BOSS",
+    "easy": "Easy",
+    "balanced": "Balanced",
+    "dangerous": "Dangerous",
+    "bestiary": "Bestiary: {{count}} kill",
+    "bestiary_other": "Bestiary: {{count}} kills",
+    "sweepBtn": "Sweep x3 (-{{energy}}⚡)",
+    "inspectBtn": "🔍 Challenge",
+    "cooldownBtn": "Cooldown ({{time}})",
+    "backToRegions": "← Back to Territories",
+    "possibleDrops": "Possible Loot:",
+    "attackEnemyBtn": "⚔️ Attack Enemy (-{{energy}}⚡)"
+  },
+  "quests": {
+    "title": "Scrolls & Daily Quests",
+    "resetNote": "Daily quests reset every day",
+    "filterAll": "All",
+    "filterDaily": "☀️ Daily",
+    "filterStory": "📜 Main Story",
+    "progress": "Progress",
+    "claimed": "✅ Reward Claimed",
+    "claimBtn": "🎁 Claim Reward",
+    "travelBtn": "🗺️ Travel to Region"
+  },
+  "bag": {
+    "title": "Equipped Gear",
+    "emptySlot": "Empty",
+    "unequip": "Unequip",
+    "use": "Use",
+    "equip": "Equip (Lv.{{level}})",
+    "sell": "Sell (+{{price}})",
+    "filterAll": "All",
+    "filterWeapon": "Weapons",
+    "filterArmor": "Armor",
+    "filterAccessory": "Accessories",
+    "filterConsumable": "Pills"
+  },
+  "shop": {
+    "title": "Treasure Pavilion",
+    "buyOne": "Buy x1"
+  },
+  "db": {
+    "monsters": {
+      "lobo-sombrio-nevoa": {
+        "name": "Shadow Mist Wolf",
+        "zone": "Mist Forest"
+      },
+      "javali-coura-ferro": {
+        "name": "Ironhide Boar",
+        "zone": "Mist Forest"
+      },
+      "boss-rei-lobo-lunar": {
+        "name": "[BOSS] Pale Moon Wolf King",
+        "zone": "Mist Forest"
+      },
+      "escorpiao-cristal-rubro": {
+        "name": "Crimson Crystal Scorpion",
+        "zone": "Redstone Gorge"
+      }
+    },
+    "quests": {
+      "story-primeiros-passos-nevoa": {
+        "title": "Baptism in the Mist Forest",
+        "description": "Prove your worth as a cultivator by defeating 3 Shadow Mist Wolves."
+      },
+      "story-provisoes-alquimicas": {
+        "title": "Survival Provisions",
+        "description": "Hold at least 2 Vital Recovery Pills in your bag (buy at the Market or loot from beasts)."
+      },
+      "story-despertar-nivel-3": {
+        "title": "Meridian Awakening",
+        "description": "Reach Combat Level 3 to strengthen your spiritual body."
+      },
+      "story-cacada-rei-lobo": {
+        "title": "Sovereign of the Pale Moon",
+        "description": "Challenge and defeat the Zone Boss [BOSS] Pale Moon Wolf King in the Mist Forest."
+      },
+      "story-expedicao-desfiladeiro": {
+        "title": "Toward the Red Stones",
+        "description": "Explore the Redstone Gorge territory by selecting the region on the Hunt map."
+      },
+      "story-expedicao-abismo": {
+        "title": "Whispers of the Slumbering Dragon",
+        "description": "Venture to the Slumbering Dragon Abyss to scout the territory."
+      },
+      "daily-patrulha-diaria": {
+        "title": "[Daily] Territory Patrol",
+        "description": "Eliminate 5 creatures from any region to keep the spiritual routes safe."
+      },
+      "daily-caca-javalis": {
+        "title": "[Daily] Hide Control",
+        "description": "Slay 2 Ironhide Boars today."
+      },
+      "daily-escorpioes-rubros": {
+        "title": "[Daily] Gorge Crystals",
+        "description": "Defeat 2 Crimson Crystal Scorpions in the Gorge."
+      }
+    },
+    "realms": {
+      "jade-celestial": {
+        "name": "Celestial Jade Sect",
+        "tagline": "Harmony, Qi Control & Longevity"
+      },
+      "chama-escarlate": {
+        "name": "Scarlet Flame Clan",
+        "tagline": "Brute Strength & Explosive Destruction"
+      },
+      "sombra-abissal": {
+        "name": "Abyssal Shadow Order",
+        "tagline": "Lethal Agility & Critical Strikes"
+      }
+    }
+  }
+}
