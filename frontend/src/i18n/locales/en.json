@@ -1,9 +1,11 @@
 {
   "common": {
+    "appTitle": "Ascension of the Two Realms",
     "level": "Level",
     "levelShort": "Lv.{{level}}",
     "servers": "Servers",
     "logout": "Logout",
+    "loggingOut": "Logging out...",
     "spiritStones": "Spirit Stones",
     "jadeTokens": "Celestial Jades",
     "stonesShort": "Stones",
@@ -12,7 +14,78 @@
     "hp": "Vitality (HP)",
     "combatXp": "Combat Level XP",
     "rankQi": "Rank Qi ({{rank}})",
-    "max": "MAX"
+    "max": "MAX",
+    "rounds": "{{count}} rounds"
+  },
+  "auth": {
+    "badge": "Chronicles of Cultivation • Server-Authoritative",
+    "title": "Ascension of the Two Realms",
+    "subtitle": "Forge your spiritual bloodline, master ancient techniques, and contest control of the realms in real time.",
+    "feat1Title": "Realms in Conflict",
+    "feat1Desc": "Choose your faction and take part in territorial wars across servers.",
+    "feat2Title": "True Cultivation & Progression",
+    "feat2Desc": "Ascend from Bronze Realm to Legendary Realm with 100% server-authoritative combat.",
+    "feat3Title": "Cross-Platform Sync",
+    "feat3Desc": "Play on PC browser, tablet, or mobile with the same account.",
+    "tabLogin": "Sign In",
+    "tabRegister": "Create Account",
+    "email": "Email",
+    "emailPlaceholder": "cultivator@realm.com",
+    "password": "Password",
+    "forgotPassword": "Forgot password?",
+    "loginBtn": "Enter the Realm",
+    "loggingIn": "Summoning session...",
+    "accountName": "Account Name (Nickname)",
+    "accountNamePlaceholder": "e.g. NieLi_99",
+    "passwordMin": "Password (minimum 8 characters)",
+    "confirmPassword": "Confirm Password",
+    "registerBtn": "Create Account",
+    "registering": "Forging account...",
+    "forgotTitle": "Recover Access",
+    "forgotDesc": "Enter your account email to generate a password reset token.",
+    "registeredEmail": "Registered email",
+    "sendTokenBtn": "Send Recovery Token",
+    "sending": "Sending...",
+    "backToLogin": "← Back to login",
+    "haveToken": "I already have a token →",
+    "forgotSent": "Instructions sent! Check your email (or storage/logs/laravel.log in dev).",
+    "resetTitle": "Reset Password",
+    "resetToken": "Recovery Token",
+    "resetTokenPlaceholder": "Paste the received token",
+    "newPassword": "New Password",
+    "confirmNewPassword": "Confirm New Password",
+    "saveNewPassword": "Save New Password",
+    "saving": "Saving...",
+    "resetSuccess": "Password reset successfully!"
+  },
+  "lobby": {
+    "step1Badge": "Step 1 • Choose World",
+    "serversTitle": "Available Servers",
+    "loadingWorld": "Consulting celestial realms...",
+    "slotAvailable": "Slot available",
+    "charFoundBadge": "Cultivator Found",
+    "powerCp": "Power (CP)",
+    "energyLabel": "Energy",
+    "stonesLabel": "Stones",
+    "enterWorldBtn": "Enter World →",
+    "step2Badge": "Step 2 • Bloodline & Faction",
+    "forgeTitle": "Forge New Cultivator",
+    "chooseRealm": "Choose Your Realm",
+    "previewStatsTitle": "Starting Attributes with Realm Bonuses:",
+    "charNameLabel": "Character Name",
+    "charNamePlaceholder": "e.g. XiaoYan",
+    "charNameHint": "3 to 20 characters (letters, numbers, and underscore _)",
+    "charNameValid": "✓ Valid name format",
+    "charNameInvalid": "Use only unaccented letters, numbers, or _ (min 3)",
+    "createCharBtn": "Create Character & Enter",
+    "creatingChar": "Awakening spirit...",
+    "bonus": {
+      "strength_pct": "Strength",
+      "agility_pct": "Agility",
+      "constitution_pct": "Constitution",
+      "spirit_power_pct": "Spirit Power",
+      "max_hp_pct": "Max HP"
+    }
   },
   "tabs": {
     "cultivate": "🧘 Cultivate",
@@ -34,11 +107,28 @@
     "constitution": "Constitution",
     "constitutionDesc": "+12 HP & defense",
     "spirit_power": "Spirit Power",
-    "spirit_powerDesc": "Magic & healing"
+    "spirit_powerDesc": "Magic & healing",
+    "shortStr": "STR",
+    "shortAgi": "AGI",
+    "shortCon": "CON",
+    "shortSpi": "SPI",
+    "healHp": "Heals {{amount}} HP",
+    "restoreEnergy": "+{{amount}} Energy"
+  },
+  "hud": {
+    "healQuick": "+Heal ({{count}})",
+    "useItemTitle": "Use {{name}}",
+    "rankUpToast": "⚡ Rank Ascension! You reached {{title}}!",
+    "levelUpToast": "🎉 Victory! You advanced to Level {{level}}!",
+    "sweepWinToast": "🏆 Sweep ({{count}}x)! +{{xp}} XP and +{{stones}} Stones.",
+    "defeatToast": "💀 You were defeated! Recover your HP before hunting again.",
+    "tacticalWinLevelUp": "🎉 Victory & Level Up! You reached Level {{level}}!",
+    "tacticalWin": "🏆 Victory! +{{xp}} XP and +{{stones}} Stones.",
+    "tacticalDefeat": "💀 You fell in battle! Recover your vitality."
   },
   "cultivate": {
     "title": "Spiritual Refinement Chamber",
-    "description": "Refine Spirit Stones to absorb Cultivation Qi and ascend your Realm Rank. Combat level progresses exclusively through Hunting.",
+    "description": "Refine Spirit Stones to absorb Cultivation Qi and ascend your Realm Rank (attribute multiplier). Combat level progresses exclusively through Hunting.",
     "fatigue": "Mental Fatigue (-1% / 2min)",
     "efficiency": "Efficiency {{pct}}%",
     "stonesAmountLabel": "Spirit Stones to Refine:",
@@ -54,24 +144,70 @@
     "btnSaturated": "Critical Fatigue (Rest Required)",
     "btnNoStones": "Not Enough Stones ({{stones}})",
     "btnNoEnergy": "Not Enough Energy ({{energy}}⚡)",
-    "recentHistory": "Recent Expeditions"
+    "recentHistory": "Recent Expeditions",
+    "beastFallback": "Beast",
+    "defeat": "Defeat"
   },
   "hunt": {
     "title": "Hunting Grounds & Bosses",
     "subtitle": "Select a beast to inspect stats and enter tactical combat",
     "allRegions": "All Regions",
+    "loadingMonsters": "Tracking beasts and bosses...",
     "bossBadge": "ZONE BOSS",
     "easy": "Easy",
     "balanced": "Balanced",
     "dangerous": "Dangerous",
     "bestiary": "Bestiary: {{count}} kill",
     "bestiary_other": "Bestiary: {{count}} kills",
+    "novice": "Novice",
     "sweepBtn": "Sweep x3 (-{{energy}}⚡)",
+    "sweepTitle": "Quick sweep: 3 automatic hunts",
     "inspectBtn": "🔍 Challenge",
     "cooldownBtn": "Cooldown ({{time}})",
     "backToRegions": "← Back to Territories",
+    "youLabel": "YOU",
+    "currentHp": "Current HP: {{hp}}/{{max}}",
+    "bossLabel": "BOSS",
+    "enemyLabel": "ENEMY",
+    "costLabel": "Cost: {{energy}}⚡",
+    "maxHpStat": "Max HP",
+    "advantage": "+{{diff}} advantage",
+    "disadvantage": "{{diff}} disadvantage",
+    "tie": "Tie",
+    "initiativePlayer": "⚡ Your initiative: your Agility grants the first turn (15s).",
+    "initiativeEnemy": "⚠️ Enemy initiative: {{name}} is faster and will strike first in 3s!",
+    "baseRewards": "Base Rewards:",
+    "bestiaryRecord": "Bestiary Record:",
+    "killsCount_one": "{{count}} kill",
+    "killsCount_other": "{{count}} kills",
     "possibleDrops": "Possible Loot:",
-    "attackEnemyBtn": "⚔️ Attack Enemy (-{{energy}}⚡)"
+    "enteringArena": "Entering Arena...",
+    "bossRecharging": "Boss Recharging ({{time}})",
+    "hpExhausted": "Vitality Exhausted (Heal First)",
+    "noEnergy": "Not Enough Energy ({{energy}}⚡)",
+    "attackEnemyBtn": "⚔️ Attack Enemy (-{{energy}}⚡)",
+    "roundLabel": "ROUND {{round}}",
+    "yourTurn_one": "Your Turn ({{count}} action left)",
+    "yourTurn_other": "Your Turn ({{count}} actions left)",
+    "enemyTurn": "{{name}}'s Turn...",
+    "spiritualAura": "🔥 Spiritual Aura ({{turns}}t)",
+    "weakened": "🌀 Weakened ({{turns}}t)",
+    "step12Title": "Step 1 & 2 (Optional in turn): Recovery & Support",
+    "healed": "Healed",
+    "healHp": "Heal HP",
+    "supportUsed": "Support Used",
+    "buffBtn": "Buff (+25%)",
+    "debuffBtn": "Debuff (-30%)",
+    "step3Title": "Step 3 (Ends your turn and passes to the monster):",
+    "physicalAttack": "⚔️ Physical Attack",
+    "magicAttack": "✨ Spiritual Magic",
+    "passBtn": "Pass",
+    "passTitle": "Pass turn to the monster",
+    "enemyCounterAttack": "⏳ {{name}} is preparing a counter-attack ({{seconds}}s)...",
+    "sweepVictory": "🏆 Sweep Completed ({{count}} victories)!",
+    "battleVictory": "🏆 Battle Victory!",
+    "battleDefeat": "💀 Defeat!",
+    "lootLabel": "🎁 Loot:"
   },
   "quests": {
     "title": "Scrolls & Daily Quests",
@@ -79,15 +215,31 @@
     "filterAll": "All",
     "filterDaily": "☀️ Daily",
     "filterStory": "📜 Main Story",
+    "loading": "Consulting quest board...",
+    "empty": "No quests available in this category.",
     "progress": "Progress",
     "claimed": "✅ Reward Claimed",
     "claimBtn": "🎁 Claim Reward",
-    "travelBtn": "🗺️ Travel to Region"
+    "travelBtn": "🗺️ Travel to Region",
+    "badges": {
+      "visit_region": "🗺️ Exploration",
+      "kill_monster": "⚔️ Specific Hunt",
+      "kill_any": "🔥 Extermination",
+      "reach_level": "⬆️ Progression",
+      "collect_item": "🎒 Collection"
+    }
   },
   "bag": {
     "title": "Equipped Gear",
+    "slotWeapon": "⚔️ Weapon",
+    "slotArmor": "🛡️ Armor",
+    "slotAccessory": "📿 Accessory",
     "emptySlot": "Empty",
+    "remove": "Remove",
     "unequip": "Unequip",
+    "equippedBadge": "✅ Equipped",
+    "loading": "Opening spatial ring...",
+    "emptyCategory": "No items in this category.",
     "use": "Use",
     "equip": "Equip (Lv.{{level}})",
     "sell": "Sell (+{{price}})",
@@ -95,14 +247,42 @@
     "filterWeapon": "Weapons",
     "filterArmor": "Armor",
     "filterAccessory": "Accessories",
-    "filterConsumable": "Pills"
+    "filterConsumable": "Pills",
+    "types": {
+      "weapon": "Weapon",
+      "armor": "Armor",
+      "accessory": "Accessory",
+      "consumable": "Consumable"
+    }
   },
   "shop": {
     "title": "Treasure Pavilion",
+    "loading": "Loading catalog...",
     "buyOne": "Buy x1"
   },
   "db": {
+    "regions": {
+      "floresta-nevoa": "Mist Forest",
+      "desfiladeiro-rubro": "Redstone Gorge",
+      "abismo-dragao": "Slumbering Dragon Abyss"
+    },
     "monsters": {
+      "horned_sheep": {
+        "name": "Spirit-Horned Ram",
+        "zone": "Mist Forest"
+      },
+      "shadow_wolf": {
+        "name": "Bronze Shadow Wolf",
+        "zone": "Mist Forest"
+      },
+      "stone_golem": {
+        "name": "Ancient Stone Guardian",
+        "zone": "Mist Forest"
+      },
+      "crimson_python": {
+        "name": "Silver Crimson Python",
+        "zone": "Redstone Gorge"
+      },
       "lobo-sombrio-nevoa": {
         "name": "Shadow Mist Wolf",
         "zone": "Mist Forest"
@@ -118,6 +298,56 @@
       "escorpiao-cristal-rubro": {
         "name": "Crimson Crystal Scorpion",
         "zone": "Redstone Gorge"
+      },
+      "golem-magma-antigo": {
+        "name": "Ancient Magma Golem",
+        "zone": "Redstone Gorge"
+      },
+      "boss-serpente-chama-escarlate": {
+        "name": "[BOSS] Scarlet Flame Serpent",
+        "zone": "Redstone Gorge"
+      },
+      "espectro-abissal": {
+        "name": "Abyssal Wraith",
+        "zone": "Slumbering Dragon Abyss"
+      },
+      "boss-guardiao-draconico": {
+        "name": "[BOSS] Corrupted Draconic Guardian",
+        "zone": "Slumbering Dragon Abyss"
+      }
+    },
+    "items": {
+      "minor_healing_pill": {
+        "name": "Vital Recovery Pill",
+        "description": "Refined from basic spiritual herbs. Restores 65 HP."
+      },
+      "qi_condensing_elixir": {
+        "name": "Qi Condensing Elixir",
+        "description": "Immediately restores 20 Spiritual Energy points."
+      },
+      "bronze_spirit_sword": {
+        "name": "Bronze Spirit Sword",
+        "description": "Blade forged with common spirit ore. Increases Strength and Spirit Power."
+      },
+      "shadow_fang_dagger": {
+        "name": "Shadow Fang Dagger",
+        "description": "Forged from the fangs of a Shadow Wolf. Grants high Agility and Strength."
+      },
+      "crimson_flame_blade": {
+        "name": "Crimson Python Blade",
+        "description": "Relic bathed in demonic fire. Drastically amplifies attack power."
+      },
+      "novice_dao_robe": {
+        "name": "Initiate's Cultivation Robe",
+        "description": "Light garment inscribed with basic protective runes."
+      },
+      "ancient_stone_plate": {
+        "name": "Ancient Stone Breastplate",
+        "description": "Heavy armor extracted from the core of a Stone Guardian."
+      },
+      "jade_soul_pendant": {
+        "name": "Soul Jade Pendant",
+        "description": "Amplifies spiritual energy circulation in the central meridian."
       }
     },
     "quests": {
@@ -159,17 +389,25 @@
       }
     },
     "realms": {
-      "jade-celestial": {
-        "name": "Celestial Jade Sect",
-        "tagline": "Harmony, Qi Control & Longevity"
+      "solar_empire": {
+        "name": "Solar Empire",
+        "tagline": "Order, Glory & Unyielding Strength",
+        "description": "Forged beneath the light of ancient celestial citadels, their warriors prioritize physical vigor and frontal dominance."
       },
-      "chama-escarlate": {
-        "name": "Scarlet Flame Clan",
-        "tagline": "Brute Strength & Explosive Destruction"
+      "abyssal_dominion": {
+        "name": "Abyssal Dominion",
+        "tagline": "Cunning, Shadows & Spiritual Power",
+        "description": "Masters of hidden arts and lethal speed, channeling spiritual essence into devastating critical strikes."
+      }
+    },
+    "servers": {
+      "S1": {
+        "name": "Celestial Dragon Valley",
+        "description": "Inaugural server. Balanced conflict between the two realms."
       },
-      "sombra-abissal": {
-        "name": "Abyssal Shadow Order",
-        "tagline": "Lethal Agility & Critical Strikes"
+      "S2": {
+        "name": "Scarlet Phoenix Peak",
+        "description": "Newly opened realm for incoming cultivators."
       }
     }
   }

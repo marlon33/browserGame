@@ -85,7 +85,7 @@ class GameplayController extends Controller
     {
         $character = $this->resolveCharacter($request);
 
-        $logs = BattleLog::with('monster:id,name,zone_name,recommended_level,is_boss')
+        $logs = BattleLog::with('monster:id,slug,name,zone_name,recommended_level,is_boss')
             ->where('character_id', $character->id)
             ->orderByDesc('id')
             ->limit(10)

@@ -1,4 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  tItemName,
+  tMonsterName,
+  tMonsterZone,
+  tRegionName,
+} from '@/utils/translateDb';
 import type {
   ActiveBattle,
   Character,
@@ -54,6 +61,7 @@ export function HuntArena({
   onTacticalMonsterTurn,
   onSweepHunt,
 }: HuntArenaProps) {
+  const { t } = useTranslation();
   const [selectedRegion, setSelectedRegion] = useState<string>(initialRegionSlug || 'all');
   const [inspectedMonsterId, setInspectedMonsterId] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState<number>(() => Date.now());
@@ -112,7 +120,7 @@ export function HuntArena({
       if (!existing) {
         map.set(m.region_slug, {
           slug: m.region_slug,
-          name: m.zone_name,
+          name: tRegionName(t, m.region_slug, m.zone_name),
           order: m.region_order,
           minLevel: m.recommended_level,
         });
@@ -121,7 +129,7 @@ export function HuntArena({
       }
     }
     return Array.from(map.values()).sort((a, b) => a.order - b.order);
-  }, [monsters]);
+  }, [monsters, t]);
 
   const visibleMonsters = useMemo(() => {
     if (selectedRegion === 'all') return monsters;
@@ -137,6 +145,7 @@ export function HuntArena({
 
   if (activeBattle && activeBattle.status === 'active') {
     const monster = activeBattle.monster;
+    const monsterLabel = monster ? tMonsterName(t, monster) : t('cultivate.beastFallback');
     const isPlayerTurn = activeBattle.current_turn === 'player';
     const maxTurnTime = isPlayerTurn ? 15 : 3;
     const timerPct = Math.min(100, Math.round((turnSecondsLeft / maxTurnTime) * 100));
@@ -174,7 +183,7 @@ export function HuntArena({
         >
           <div>
             <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-              RODADA {activeBattle.round}
+              {t('hunt.roundLabel', { round: activeBattle.round })}
             </div>
             <strong
               style={{
@@ -183,8 +192,8 @@ export function HuntArena({
               }}
             >
               {isPlayerTurn
-                ? `Seu Turno (${actionsRemaining} ${actionsRemaining === 1 ? 'ação restante' : 'ações restantes'})`
-                : `Turno de ${monster?.name ?? 'Inimigo'}...`}
+                ? t('hunt.yourTurn', { count: actionsRemaining })
+                : t('hunt.enemyTurn', { name: monsterLabel })}
             </strong>
           </div>
 
@@ -221,7 +230,7 @@ export function HuntArena({
             }}
           >
             <div style={{ fontSize: '0.72rem', color: 'var(--jade-accent)', fontWeight: 700 }}>
-              🧘 {character.name} (Nv.{character.level})
+              🧘 {character.name} ({t('common.levelShort', { level: character.level })})
             </div>
             <div style={{ fontSize: '0.86rem', fontWeight: 700, margin: '0.25rem 0' }}>
               {activeBattle.player_hp} / {activeBattle.player_max_hp} HP
@@ -238,7 +247,7 @@ export function HuntArena({
             </div>
             {buffTurns > 0 && (
               <div style={{ fontSize: '0.68rem', color: '#fbbf24', marginTop: '0.35rem' }}>
-                🔥 Aura Espiritual ({buffTurns}t)
+                {t('hunt.spiritualAura', { turns: buffTurns })}
               </div>
             )}
           </div>
@@ -252,7 +261,8 @@ export function HuntArena({
             }}
           >
             <div style={{ fontSize: '0.72rem', color: '#f87171', fontWeight: 700 }}>
-              {monster?.is_boss ? '👑 ' : '👹 '}{monster?.name ?? 'Monstro'}
+              {monster?.is_boss ? '👑 ' : '👹 '}
+              {monsterLabel}
             </div>
             <div style={{ fontSize: '0.86rem', fontWeight: 700, margin: '0.25rem 0' }}>
               {activeBattle.monster_hp} / {activeBattle.monster_max_hp} HP
@@ -269,7 +279,7 @@ export function HuntArena({
             </div>
             {debuffTurns > 0 && (
               <div style={{ fontSize: '0.68rem', color: '#c084fc', marginTop: '0.35rem' }}>
-                🌀 Enfraquecido ({debuffTurns}t)
+                {t('hunt.weakened', { turns: debuffTurns })}
               </div>
             )}
           </div>
@@ -288,7 +298,7 @@ export function HuntArena({
             }}
           >
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              <strong>Passo 1 & 2 (Opcionais no turno):</strong> Recuperação e Suporte
+              <strong>{t('hunt.step12Title')}</strong>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.45rem' }}>
@@ -307,7 +317,7 @@ export function HuntArena({
                   cursor: healUsed ? 'not-allowed' : 'pointer',
                 }}
               >
-                💚 {healUsed ? 'Curado' : 'Curar HP'}
+                💚 {healUsed ? t('hunt.healed') : t('hunt.healHp')}
               </button>
 
               <button
@@ -325,7 +335,7 @@ export function HuntArena({
                   cursor: supportUsed ? 'not-allowed' : 'pointer',
                 }}
               >
-                🔥 {supportUsed ? 'Suporte Usado' : 'Buff (+25%)'}
+                🔥 {supportUsed ? t('hunt.supportUsed') : t('hunt.buffBtn')}
               </button>
 
               <button
@@ -343,12 +353,12 @@ export function HuntArena({
                   cursor: supportUsed ? 'not-allowed' : 'pointer',
                 }}
               >
-                🌀 {supportUsed ? 'Suporte Usado' : 'Debuff (-30%)'}
+                🌀 {supportUsed ? t('hunt.supportUsed') : t('hunt.debuffBtn')}
               </button>
             </div>
 
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-              <strong>Passo 3 (Encerra seu turno e passa para o monstro):</strong>
+              <strong>{t('hunt.step3Title')}</strong>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '0.45rem' }}>
@@ -368,7 +378,7 @@ export function HuntArena({
                   cursor: 'pointer',
                 }}
               >
-                ⚔️ Ataque Físico
+                {t('hunt.physicalAttack')}
               </button>
 
               <button
@@ -387,14 +397,14 @@ export function HuntArena({
                   cursor: 'pointer',
                 }}
               >
-                ✨ Magia Espiritual
+                {t('hunt.magicAttack')}
               </button>
 
               <button
                 type="button"
                 disabled={isExecutingAction}
                 onClick={() => onTacticalAction(activeBattle.id, 'pass')}
-                title="Passar a vez para o monstro"
+                title={t('hunt.passTitle')}
                 style={{
                   minHeight: '42px',
                   padding: '0 0.65rem',
@@ -406,7 +416,7 @@ export function HuntArena({
                   cursor: 'pointer',
                 }}
               >
-                Passar
+                {t('hunt.passBtn')}
               </button>
             </div>
           </div>
@@ -423,7 +433,7 @@ export function HuntArena({
               fontWeight: 600,
             }}
           >
-            ⏳ {monster?.name ?? 'A besta'} está preparando o contra-ataque ({turnSecondsLeft}s)...
+            {t('hunt.enemyCounterAttack', { name: monsterLabel, seconds: turnSecondsLeft })}
           </div>
         )}
 
@@ -462,6 +472,8 @@ export function HuntArena({
   }
 
   if (inspectedMonster) {
+    const monsterName = tMonsterName(t, inspectedMonster);
+    const monsterZone = tMonsterZone(t, inspectedMonster);
     const bestiary = inspectedMonster.bestiary;
     const kills = bestiary?.kills_count ?? 0;
     const mastery = bestiary?.mastery;
@@ -484,17 +496,23 @@ export function HuntArena({
     const playerMaxHp = eff?.max_hp ?? character.max_hp;
     const playerAttack =
       combat?.attack ??
-      Math.round((eff?.strength ?? character.strength) * 2.2 + (eff?.spirit_power ?? character.spirit_power) * 1.1);
+      Math.round(
+        (eff?.strength ?? character.strength) * 2.2 +
+          (eff?.spirit_power ?? character.spirit_power) * 1.1
+      );
     const playerDefense =
       combat?.defense ??
-      Math.round((eff?.constitution ?? character.constitution) * 1.4 + (eff?.agility ?? character.agility) * 0.5);
+      Math.round(
+        (eff?.constitution ?? character.constitution) * 1.4 +
+          (eff?.agility ?? character.agility) * 0.5
+      );
     const playerAgility = eff?.agility ?? character.agility;
 
     const comparisonRows = [
-      { label: 'HP Máx.', playerVal: playerMaxHp, mobVal: inspectedMonster.max_hp },
-      { label: 'Ataque', playerVal: playerAttack, mobVal: inspectedMonster.attack },
-      { label: 'Defesa', playerVal: playerDefense, mobVal: inspectedMonster.defense },
-      { label: 'Agilidade', playerVal: playerAgility, mobVal: inspectedMonster.agility },
+      { label: t('hunt.maxHpStat'), playerVal: playerMaxHp, mobVal: inspectedMonster.max_hp },
+      { label: t('stats.attack'), playerVal: playerAttack, mobVal: inspectedMonster.attack },
+      { label: t('stats.defense'), playerVal: playerDefense, mobVal: inspectedMonster.defense },
+      { label: t('stats.agility'), playerVal: playerAgility, mobVal: inspectedMonster.agility },
     ];
 
     const playerAttacksFirst = playerAgility >= inspectedMonster.agility;
@@ -515,11 +533,11 @@ export function HuntArena({
               cursor: 'pointer',
             }}
           >
-            ← Voltar aos Territórios
+            {t('hunt.backToRegions')}
           </button>
 
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            {inspectedMonster.zone_name}
+            {monsterZone}
           </span>
         </div>
 
@@ -546,13 +564,13 @@ export function HuntArena({
           >
             <div>
               <div style={{ fontSize: '0.72rem', color: 'var(--jade-accent)', fontWeight: 700 }}>
-                VOCÊ • Nv.{character.level}
+                {t('hunt.youLabel')} • {t('common.levelShort', { level: character.level })}
               </div>
               <strong style={{ fontSize: '0.98rem', color: 'var(--text-main)' }}>
                 🧘 {character.name}
               </strong>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                HP Atual: {character.hp}/{playerMaxHp}
+                {t('hunt.currentHp', { hp: character.hp, max: playerMaxHp })}
               </div>
             </div>
 
@@ -578,7 +596,8 @@ export function HuntArena({
                   fontWeight: 700,
                 }}
               >
-                {inspectedMonster.is_boss ? 'CHEFE' : 'ADVERSÁRIO'} • Nv.{inspectedMonster.recommended_level}
+                {inspectedMonster.is_boss ? t('hunt.bossLabel') : t('hunt.enemyLabel')} •{' '}
+                {t('common.levelShort', { level: inspectedMonster.recommended_level })}
               </div>
               <strong
                 style={{
@@ -587,10 +606,10 @@ export function HuntArena({
                 }}
               >
                 {inspectedMonster.is_boss ? '👑 ' : '👹 '}
-                {inspectedMonster.name}
+                {monsterName}
               </strong>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                Custo: {inspectedMonster.energy_cost}⚡
+                {t('hunt.costLabel', { energy: inspectedMonster.energy_cost })}
               </div>
             </div>
           </div>
@@ -636,7 +655,11 @@ export function HuntArena({
                         color: playerWins ? '#34d399' : tie ? '#9ca3af' : '#f87171',
                       }}
                     >
-                      {diff > 0 ? `+${diff} vantagem` : diff < 0 ? `${diff} desvantagem` : 'Empate'}
+                      {diff > 0
+                        ? t('hunt.advantage', { diff })
+                        : diff < 0
+                        ? t('hunt.disadvantage', { diff })
+                        : t('hunt.tie')}
                     </span>
                   </div>
 
@@ -669,24 +692,25 @@ export function HuntArena({
             }}
           >
             {playerAttacksFirst
-              ? '⚡ Iniciativa sua: sua Agilidade garante o primeiro turno (15s).'
-              : `⚠️ Iniciativa do inimigo: ${inspectedMonster.name} é mais veloz e atacará primeiro em 3s!`}
+              ? t('hunt.initiativePlayer')
+              : t('hunt.initiativeEnemy', { name: monsterName })}
           </div>
 
           <div style={{ fontSize: '0.78rem', marginBottom: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
             <div>
-              <span style={{ color: 'var(--text-muted)' }}>Recompensas Base: </span>
+              <span style={{ color: 'var(--text-muted)' }}>{t('hunt.baseRewards')} </span>
               <strong style={{ color: 'var(--gold-primary)' }}>
-                +{inspectedMonster.xp_reward} XP • +{inspectedMonster.spirit_stones_reward} Pedras
+                +{inspectedMonster.xp_reward} XP • +{inspectedMonster.spirit_stones_reward}{' '}
+                {t('common.stonesShort')}
               </strong>
               {inspectedMonster.cultivation_qi_reward > 0 && (
                 <strong style={{ color: '#c084fc' }}> • +{inspectedMonster.cultivation_qi_reward} Qi</strong>
               )}
             </div>
             <div>
-              <span style={{ color: 'var(--text-muted)' }}>Registro no Bestiário: </span>
+              <span style={{ color: 'var(--text-muted)' }}>{t('hunt.bestiaryRecord')} </span>
               <strong style={{ color: '#d8b4fe' }}>
-                {kills} {kills === 1 ? 'abate' : 'abates'} ({mastery?.label ?? 'Novato'})
+                {t('hunt.killsCount', { count: kills })} ({mastery?.label ?? t('hunt.novice')})
               </strong>
             </div>
           </div>
@@ -694,7 +718,7 @@ export function HuntArena({
           {inspectedMonster.drops && inspectedMonster.drops.length > 0 && (
             <div style={{ marginBottom: '1rem' }}>
               <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
-                Espólios Possíveis:
+                {t('hunt.possibleDrops')}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                 {inspectedMonster.drops.map((d) =>
@@ -709,7 +733,7 @@ export function HuntArena({
                         color: RARITY_COLORS[d.item.rarity],
                       }}
                     >
-                      🎁 {d.item.name} ({d.drop_chance_pct}%)
+                      🎁 {tItemName(t, d.item)} ({d.drop_chance_pct}%)
                     </span>
                   ) : null
                 )}
@@ -727,14 +751,14 @@ export function HuntArena({
             }}
           >
             {isStartingBattle
-              ? 'Entrando na Arena...'
+              ? t('hunt.enteringArena')
               : bossCooldownSec > 0
-              ? `Chefe em Recarga (${formatSeconds(bossCooldownSec)})`
+              ? t('hunt.bossRecharging', { time: formatSeconds(bossCooldownSec) })
               : character.hp <= 0
-              ? 'Vitalidade Esgotada (Cure-se)'
+              ? t('hunt.hpExhausted')
               : character.energy < inspectedMonster.energy_cost
-              ? `Energia Insuficiente (${inspectedMonster.energy_cost}⚡)`
-              : `⚔️ Atacar Inimigo (-${inspectedMonster.energy_cost}⚡)`}
+              ? t('hunt.noEnergy', { energy: inspectedMonster.energy_cost })
+              : t('hunt.attackEnemyBtn', { energy: inspectedMonster.energy_cost })}
           </button>
         </div>
       </div>
@@ -744,9 +768,9 @@ export function HuntArena({
   return (
     <div className="form-stack">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
-        <h3 style={{ fontSize: '1.15rem' }}>Territórios de Caça & Chefes</h3>
+        <h3 style={{ fontSize: '1.15rem' }}>{t('hunt.title')}</h3>
         <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-          Selecione uma besta para inspecionar e iniciar combate tático
+          {t('hunt.subtitle')}
         </span>
       </div>
 
@@ -765,7 +789,7 @@ export function HuntArena({
             color: selectedRegion === 'all' ? '#090b10' : 'var(--text-muted)',
           }}
         >
-          Todas as Regiões
+          {t('hunt.allRegions')}
         </button>
 
         {regions.map((reg) => (
@@ -784,13 +808,13 @@ export function HuntArena({
               color: selectedRegion === reg.slug ? '#090b10' : 'var(--text-muted)',
             }}
           >
-            {reg.name} (Nv.{reg.minLevel}+)
+            {reg.name} ({t('common.levelShort', { level: reg.minLevel })}+)
           </button>
         ))}
       </div>
 
       {isLoadingMonsters ? (
-        <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>Rastreando bestas e chefes...</p>
+        <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>{t('hunt.loadingMonsters')}</p>
       ) : (
         <div className="form-stack">
           {visibleMonsters.map((monster) => {
@@ -814,12 +838,12 @@ export function HuntArena({
 
             const levelDiff = monster.recommended_level - character.level;
             const diffBadge = monster.is_boss
-              ? { label: 'CHEFE DE ZONA', color: '#f59e0b' }
+              ? { label: t('hunt.bossBadge'), color: '#f59e0b' }
               : levelDiff <= 0
-              ? { label: 'Fácil', color: 'var(--jade-accent)' }
+              ? { label: t('hunt.easy'), color: 'var(--jade-accent)' }
               : levelDiff <= 2
-              ? { label: 'Equilibrado', color: '#fbbf24' }
-              : { label: 'Perigoso', color: '#f87171' };
+              ? { label: t('hunt.balanced'), color: '#fbbf24' }
+              : { label: t('hunt.dangerous'), color: '#f87171' };
 
             return (
               <div
@@ -837,15 +861,17 @@ export function HuntArena({
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                   <strong style={{ fontSize: '0.96rem', color: monster.is_boss ? '#fbbf24' : 'var(--text-main)' }}>
-                    {monster.is_boss ? '👑 ' : ''}{monster.name}
+                    {monster.is_boss ? '👑 ' : ''}
+                    {tMonsterName(t, monster)}
                   </strong>
                   <span style={{ fontSize: '0.72rem', color: diffBadge.color, fontWeight: 800 }}>
-                    Nv.{monster.recommended_level} • {diffBadge.label}
+                    {t('common.levelShort', { level: monster.recommended_level })} • {diffBadge.label}
                   </span>
                 </div>
 
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                  {monster.zone_name} • HP {monster.max_hp} • ATQ {monster.attack} • DEF {monster.defense}
+                  {tMonsterZone(t, monster)} • HP {monster.max_hp} • {t('stats.attack')}{' '}
+                  {monster.attack} • {t('stats.defense')} {monster.defense}
                 </div>
 
                 <div
@@ -867,7 +893,7 @@ export function HuntArena({
                       fontWeight: 600,
                     }}
                   >
-                    📖 Bestiário: {kills} {kills === 1 ? 'abate' : 'abates'}
+                    📖 {t('hunt.bestiary', { count: kills })}
                     {mastery && mastery.tier > 0 ? ` (${mastery.label})` : ''}
                   </span>
                 </div>
@@ -883,7 +909,7 @@ export function HuntArena({
                   }}
                 >
                   <span style={{ fontSize: '0.76rem', color: '#9ca3af' }}>
-                    +{monster.xp_reward} XP • +{monster.spirit_stones_reward} Pedras
+                    +{monster.xp_reward} XP • +{monster.spirit_stones_reward} {t('common.stonesShort')}
                   </span>
 
                   <div style={{ display: 'flex', gap: '0.4rem' }}>
@@ -892,7 +918,7 @@ export function HuntArena({
                         type="button"
                         disabled={isHunting || !canAfford3}
                         onClick={() => onSweepHunt(monster.id, 3)}
-                        title="Varredura rápida: 3 caçadas automáticas"
+                        title={t('hunt.sweepTitle')}
                         style={{
                           minHeight: '38px',
                           padding: '0 0.7rem',
@@ -905,7 +931,7 @@ export function HuntArena({
                           cursor: canAfford3 ? 'pointer' : 'not-allowed',
                         }}
                       >
-                        Varredura x3 (-{monster.energy_cost * 3}⚡)
+                        {t('hunt.sweepBtn', { energy: monster.energy_cost * 3 })}
                       </button>
                     )}
 
@@ -925,8 +951,8 @@ export function HuntArena({
                       }}
                     >
                       {bossCooldownSec > 0
-                        ? `Recarga (${formatSeconds(bossCooldownSec)})`
-                        : '🔍 Enfrentar'}
+                        ? t('hunt.cooldownBtn', { time: formatSeconds(bossCooldownSec) })
+                        : t('hunt.inspectBtn')}
                     </button>
                   </div>
                 </div>
@@ -953,24 +979,24 @@ export function HuntArena({
             <strong style={{ color: lastBattle.outcome === 'victory' ? 'var(--jade-accent)' : '#fca5a5' }}>
               {lastBattle.outcome === 'victory'
                 ? lastBattle.fights_completed > 1
-                  ? `🏆 Varredura Concluída (${lastBattle.fights_completed} vitórias)!`
-                  : '🏆 Vitória em Combate!'
-                : '💀 Derrota!'}
+                  ? t('hunt.sweepVictory', { count: lastBattle.fights_completed })
+                  : t('hunt.battleVictory')
+                : t('hunt.battleDefeat')}
             </strong>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              {lastBattle.rounds} rodadas
+              {t('common.rounds', { count: lastBattle.rounds })}
             </span>
           </div>
 
           {lastBattle.outcome === 'victory' && (
             <div style={{ fontSize: '0.8rem', color: 'var(--gold-primary)', marginBottom: '0.45rem' }}>
-              +{lastBattle.xp_gained} XP • +{lastBattle.spirit_stones_gained} Pedras
+              +{lastBattle.xp_gained} XP • +{lastBattle.spirit_stones_gained} {t('common.stonesShort')}
               {lastBattle.qi_gained > 0 && (
                 <span style={{ color: '#c084fc' }}> • +{lastBattle.qi_gained} Qi</span>
               )}
               {lastBattle.items_dropped && lastBattle.items_dropped.length > 0 && (
                 <div style={{ color: '#38bdf8', marginTop: '0.2rem' }}>
-                  🎁 Espólio:{' '}
+                  {t('hunt.lootLabel')}{' '}
                   {lastBattle.items_dropped
                     .map((d) => `${d.quantity}x ${d.name}`)
                     .join(', ')}

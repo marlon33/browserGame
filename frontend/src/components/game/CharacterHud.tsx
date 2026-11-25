@@ -1,10 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { useGameplay, type StatKey } from '@/hooks/useGameplay';
 import { useInventory } from '@/hooks/useInventory';
 import { useQuests } from '@/hooks/useQuests';
 import { getErrorMessage } from '@/utils/getErrorMessage';
+import {
+  tItemDesc,
+  tItemName,
+  tMonsterName,
+  tRealmName,
+} from '@/utils/translateDb';
 import { Toast, type ToastData } from '@/components/ui/Toast';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { HuntArena } from '@/components/game/HuntArena';
 import { QuestsPanel } from '@/components/game/QuestsPanel';
 import type { Character, HuntResult, Item, TacticalActionType } from '@/types/game';
@@ -25,30 +33,12 @@ const RARITY_COLORS: Record<Item['rarity'], string> = {
   legendary: '#f59e0b',
 };
 
-const TYPE_LABELS: Record<Item['type'], string> = {
-  weapon: 'Arma',
-  armor: 'Armadura',
-  accessory: 'Acessório',
-  consumable: 'Consumível',
-};
-
-function formatItemStats(item: Item): string {
-  const parts: string[] = [];
-  if (item.bonus_strength) parts.push(`+${item.bonus_strength} FOR`);
-  if (item.bonus_agility) parts.push(`+${item.bonus_agility} AGI`);
-  if (item.bonus_constitution) parts.push(`+${item.bonus_constitution} CON`);
-  if (item.bonus_spirit_power) parts.push(`+${item.bonus_spirit_power} ESP`);
-  if (item.bonus_max_hp) parts.push(`+${item.bonus_max_hp} HP`);
-  if (item.heal_hp) parts.push(`Cura ${item.heal_hp} HP`);
-  if (item.restore_energy) parts.push(`+${item.restore_energy} Energia`);
-  return parts.join(' • ');
-}
-
 export function CharacterHud({
   character,
   onSwitchCharacter,
   onLogout,
 }: CharacterHudProps) {
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<GameTab>('cultivate');
   const [targetRegionSlug, setTargetRegionSlug] = useState<string | null>(null);
@@ -58,6 +48,20 @@ export function CharacterHud({
   const [cooldownLeft, setCooldownLeft] = useState<number>(0);
   const [toast, setToast] = useState<ToastData | null>(null);
   const [lastBattle, setLastBattle] = useState<HuntResult | null>(null);
+
+  const numberLocale = i18n.language === 'en' ? 'en-US' : 'pt-BR';
+
+  const formatItemStats = (item: Item): string => {
+    const parts: string[] = [];
+    if (item.bonus_strength) parts.push(`+${item.bonus_strength} ${t('stats.shortStr')}`);
+    if (item.bonus_agility) parts.push(`+${item.bonus_agility} ${t('stats.shortAgi')}`);
+    if (item.bonus_constitution) parts.push(`+${item.bonus_constitution} ${t('stats.shortCon')}`);
+    if (item.bonus_spirit_power) parts.push(`+${item.bonus_spirit_power} ${t('stats.shortSpi')}`);
+    if (item.bonus_max_hp) parts.push(`+${item.bonus_max_hp} HP`);
+    if (item.heal_hp) parts.push(t('stats.healHp', { amount: item.heal_hp }));
+    if (item.restore_energy) parts.push(t('stats.restoreEnergy', { amount: item.restore_energy }));
+    return parts.join(' • ');
+  };
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ id: Date.now(), type, message });
@@ -174,11 +178,11 @@ export function CharacterHud({
     const armor = inventory.find((i) => i.is_equipped && i.item.type === 'armor');
     const accessory = inventory.find((i) => i.is_equipped && i.item.type === 'accessory');
     return [
-      { slot: 'weapon' as const, label: '⚔️ Arma', equipped: weapon },
-      { slot: 'armor' as const, label: '🛡️ Armadura', equipped: armor },
-      { slot: 'accessory' as const, label: '📿 Acessório', equipped: accessory },
+      { slot: 'weapon' as const, label: t('bag.slotWeapon'), equipped: weapon },
+      { slot: 'armor' as const, label: t('bag.slotArmor'), equipped: armor },
+      { slot: 'accessory' as const, label: t('bag.slotAccessory'), equipped: accessory },
     ];
-  }, [inventory]);
+  }, [inventory, t]);
 
   const filteredInventory = useMemo(
     () => (bagFilter === 'all' ? inventory : inventory.filter((i) => i.item.type === bagFilter)),
@@ -199,7 +203,7 @@ export function CharacterHud({
       onSuccess: (data) => {
         let msg = data.message;
         if (data.rank_up_title) {
-          msg = `⚡ Ascensão de Patente! Você alcançou ${data.rank_up_title}!`;
+          msg = t('hud.rankUpToast', { title: data.rank_up_title });
         }
         showToast('success', msg);
       },
@@ -225,14 +229,18 @@ export function CharacterHud({
           setLastBattle(result);
           refreshQuests();
           if (result.levels_gained > 0) {
-            showToast('success', `🎉 Vitória! Você avançou para o Nível ${result.character.level}!`);
+            showToast('success', t('hud.levelUpToast', { level: result.character.level }));
           } else if (result.outcome === 'victory') {
             showToast(
               'success',
-              `🏆 Varredura (${result.fights_completed}x)! +${result.xp_gained} XP e +${result.spirit_stones_gained} Pedras.`
+              t('hud.sweepWinToast', {
+                count: result.fights_completed,
+                xp: result.xp_gained,
+                stones: result.spirit_stones_gained,
+              })
             );
           } else {
-            showToast('error', '💀 Você foi derrotado! Recupere seu HP antes de caçar novamente.');
+            showToast('error', t('hud.defeatToast'));
           }
         },
         onError: (err) => showToast('error', getErrorMessage(err)),
@@ -272,8 +280,11 @@ export function CharacterHud({
             showToast(
               'success',
               rw.levels_gained > 0
-                ? `🎉 Vitória e Level Up! Você alcançou o Nível ${updatedChar.level}!`
-                : `🏆 Vitória! +${rw.xp_gained} XP e +${rw.spirit_stones_gained} Pedras.`
+                ? t('hud.tacticalWinLevelUp', { level: updatedChar.level })
+                : t('hud.tacticalWin', {
+                    xp: rw.xp_gained,
+                    stones: rw.spirit_stones_gained,
+                  })
             );
           }
         },
@@ -299,7 +310,7 @@ export function CharacterHud({
             battle_id: battle.id,
             character: updatedChar,
           });
-          showToast('error', '💀 Você caiu em combate! Recupere sua vitalidade.');
+          showToast('error', t('hud.tacticalDefeat'));
         }
       },
       onError: (err) => showToast('error', getErrorMessage(err)),
@@ -309,40 +320,40 @@ export function CharacterHud({
   const statList: { key: StatKey; label: string; total: number; bonus: number; desc: string }[] = [
     {
       key: 'strength',
-      label: 'Força',
+      label: t('stats.strength'),
       total: eff?.strength ?? character.strength,
       bonus: eff?.bonus_strength ?? 0,
-      desc: 'Dano físico',
+      desc: t('stats.strengthDesc'),
     },
     {
       key: 'agility',
-      label: 'Agilidade',
+      label: t('stats.agility'),
       total: eff?.agility ?? character.agility,
       bonus: eff?.bonus_agility ?? 0,
-      desc: 'Crítico & iniciativa',
+      desc: t('stats.agilityDesc'),
     },
     {
       key: 'constitution',
-      label: 'Constituição',
+      label: t('stats.constitution'),
       total: eff?.constitution ?? character.constitution,
       bonus: eff?.bonus_constitution ?? 0,
-      desc: '+12 HP & defesa',
+      desc: t('stats.constitutionDesc'),
     },
     {
       key: 'spirit_power',
-      label: 'Poder Espiritual',
+      label: t('stats.spirit_power'),
       total: eff?.spirit_power ?? character.spirit_power,
       bonus: eff?.bonus_spirit_power ?? 0,
-      desc: 'Magia & cura',
+      desc: t('stats.spirit_powerDesc'),
     },
   ];
 
   const filterOptions: { key: ItemFilter; label: string }[] = [
-    { key: 'all', label: 'Todos' },
-    { key: 'weapon', label: 'Armas' },
-    { key: 'armor', label: 'Armaduras' },
-    { key: 'accessory', label: 'Acessórios' },
-    { key: 'consumable', label: 'Pílulas' },
+    { key: 'all', label: t('bag.filterAll') },
+    { key: 'weapon', label: t('bag.filterWeapon') },
+    { key: 'armor', label: t('bag.filterArmor') },
+    { key: 'accessory', label: t('bag.filterAccessory') },
+    { key: 'consumable', label: t('bag.filterConsumable') },
   ];
 
   return (
@@ -363,7 +374,7 @@ export function CharacterHud({
               border: `1px solid ${rankColor}55`,
             }}
           >
-            {character.cultivation_rank?.title ?? 'Bronze 1 Estrela'}
+            {character.cultivation_rank?.title ?? 'Bronze 1'}
           </span>
           {combat && (
             <span
@@ -376,12 +387,13 @@ export function CharacterHud({
                 color: '#38bdf8',
               }}
             >
-              CP {combat.combat_power.toLocaleString('pt-BR')}
+              CP {combat.combat_power.toLocaleString(numberLocale)}
             </span>
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <LanguageSwitcher />
           <button
             type="button"
             className="btn-ghost"
@@ -393,10 +405,10 @@ export function CharacterHud({
             }}
             onClick={onSwitchCharacter}
           >
-            Servidores
+            {t('common.servers')}
           </button>
           <button type="button" className="btn-outline-danger" onClick={onLogout}>
-            Sair
+            {t('common.logout')}
           </button>
         </div>
       </header>
@@ -413,16 +425,16 @@ export function CharacterHud({
                 letterSpacing: '0.06em',
               }}
             >
-              {character.realm?.name} • {character.server?.code}
+              {character.realm ? tRealmName(t, character.realm) : ''} • {character.server?.code}
             </span>
             <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>
-              Nível <strong>{character.level}</strong>
+              {t('common.level')} <strong>{character.level}</strong>
             </span>
           </div>
 
           <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
-              <span>Vitalidade (HP)</span>
+              <span>{t('common.hp')}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <strong>
                   {character.hp} / {displayMaxHp}
@@ -437,7 +449,9 @@ export function CharacterHud({
                         onError: (err) => showToast('error', getErrorMessage(err)),
                       });
                     }}
-                    title={`Usar ${healingPotionEntry.item.name}`}
+                    title={t('hud.useItemTitle', {
+                      name: tItemName(t, healingPotionEntry.item),
+                    })}
                     style={{
                       padding: '0.12rem 0.5rem',
                       borderRadius: '6px',
@@ -449,7 +463,7 @@ export function CharacterHud({
                       cursor: 'pointer',
                     }}
                   >
-                    +Curar ({healingPotionEntry.quantity})
+                    {t('hud.healQuick', { count: healingPotionEntry.quantity })}
                   </button>
                 )}
               </div>
@@ -468,7 +482,7 @@ export function CharacterHud({
 
           <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
-              <span>Energia (+1 / 3min)</span>
+              <span>{t('common.energy')}</span>
               <strong>
                 {character.energy} / {character.max_energy}
               </strong>
@@ -487,9 +501,10 @@ export function CharacterHud({
 
           <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
-              <span>XP de Nível (Combate)</span>
+              <span>{t('common.combatXp')}</span>
               <strong>
-                {character.experience.toLocaleString('pt-BR')} / {xpRequired.toLocaleString('pt-BR')}
+                {character.experience.toLocaleString(numberLocale)} /{' '}
+                {xpRequired.toLocaleString(numberLocale)}
               </strong>
             </div>
             <div style={{ height: '8px', background: 'var(--bg-void)', borderRadius: '999px', overflow: 'hidden' }}>
@@ -506,10 +521,14 @@ export function CharacterHud({
 
           <div style={{ marginBottom: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.25rem' }}>
-              <span style={{ color: '#c084fc' }}>Qi de Patente ({character.cultivation_rank?.title})</span>
+              <span style={{ color: '#c084fc' }}>
+                {t('common.rankQi', { rank: character.cultivation_rank?.title ?? '' })}
+              </span>
               <strong>
-                {cultivationXp.toLocaleString('pt-BR')}
-                {nextRankTarget ? ` / ${nextRankTarget.toLocaleString('pt-BR')}` : ' (MÁX)'}
+                {cultivationXp.toLocaleString(numberLocale)}
+                {nextRankTarget
+                  ? ` / ${nextRankTarget.toLocaleString(numberLocale)}`
+                  : ` (${t('common.max')})`}
               </strong>
             </div>
             <div style={{ height: '8px', background: 'var(--bg-void)', borderRadius: '999px', overflow: 'hidden' }}>
@@ -538,15 +557,15 @@ export function CharacterHud({
               }}
             >
               <div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Ataque</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{t('stats.attack')}</div>
                 <strong style={{ fontSize: '0.92rem', color: '#f87171' }}>{combat.attack}</strong>
               </div>
               <div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Defesa</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{t('stats.defense')}</div>
                 <strong style={{ fontSize: '0.92rem', color: '#60a5fa' }}>{combat.defense}</strong>
               </div>
               <div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Crítico</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{t('stats.crit')}</div>
                 <strong style={{ fontSize: '0.92rem', color: '#fbbf24' }}>{combat.crit_chance_pct}%</strong>
               </div>
             </div>
@@ -554,24 +573,24 @@ export function CharacterHud({
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '1.1rem' }}>
             <div style={{ background: 'var(--bg-void)', padding: '0.65rem', borderRadius: '10px' }}>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Pedras Espirituais</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{t('common.spiritStones')}</div>
               <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--gold-primary)' }}>
-                {character.spirit_stones.toLocaleString('pt-BR')}
+                {character.spirit_stones.toLocaleString(numberLocale)}
               </div>
             </div>
             <div style={{ background: 'var(--bg-void)', padding: '0.65rem', borderRadius: '10px' }}>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Jades Celestiais</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{t('common.jadeTokens')}</div>
               <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--jade-accent)' }}>
-                {character.jade_tokens.toLocaleString('pt-BR')}
+                {character.jade_tokens.toLocaleString(numberLocale)}
               </div>
             </div>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
-            <h3 style={{ fontSize: '1rem' }}>Atributos</h3>
+            <h3 style={{ fontSize: '1rem' }}>{t('stats.title')}</h3>
             {character.stat_points > 0 && (
               <span className="auth-badge" style={{ marginBottom: 0 }}>
-                +{character.stat_points} pts livres
+                {t('stats.freePoints', { count: character.stat_points })}
               </span>
             )}
           </div>
@@ -607,7 +626,7 @@ export function CharacterHud({
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                     <button
                       type="button"
-                      aria-label={`Aumentar ${item.label}`}
+                      aria-label={`+1 ${item.label}`}
                       disabled={allocateStatMutation.isPending}
                       onClick={() => handleAllocateStat(item.key, 1)}
                       style={{
@@ -627,7 +646,7 @@ export function CharacterHud({
                     {character.stat_points >= 5 && (
                       <button
                         type="button"
-                        aria-label={`Aumentar ${item.label} em 5`}
+                        aria-label={`+5 ${item.label}`}
                         disabled={allocateStatMutation.isPending}
                         onClick={() => handleAllocateStat(item.key, 5)}
                         style={{
@@ -666,7 +685,7 @@ export function CharacterHud({
               style={{ fontSize: '0.76rem', padding: '0 0.2rem' }}
               onClick={() => setActiveTab('cultivate')}
             >
-              🧘 Cultivo
+              {t('tabs.cultivate')}
             </button>
             <button
               type="button"
@@ -676,7 +695,7 @@ export function CharacterHud({
               style={{ fontSize: '0.76rem', padding: '0 0.2rem' }}
               onClick={() => setActiveTab('hunt')}
             >
-              ⚔️ Caça
+              {t('tabs.hunt')}
             </button>
             <button
               type="button"
@@ -689,7 +708,7 @@ export function CharacterHud({
                 refreshQuests();
               }}
             >
-              📜 Missões {claimableCount > 0 ? `(${claimableCount})` : ''}
+              {t('tabs.quests')} {claimableCount > 0 ? `(${claimableCount})` : ''}
             </button>
             <button
               type="button"
@@ -699,7 +718,7 @@ export function CharacterHud({
               style={{ fontSize: '0.76rem', padding: '0 0.2rem' }}
               onClick={() => setActiveTab('bag')}
             >
-              🎒 Mochila ({inventory.length})
+              {t('tabs.bag')} ({inventory.length})
             </button>
             <button
               type="button"
@@ -709,16 +728,15 @@ export function CharacterHud({
               style={{ fontSize: '0.76rem', padding: '0 0.2rem' }}
               onClick={() => setActiveTab('shop')}
             >
-              🏛️ Mercado
+              {t('tabs.shop')}
             </button>
           </div>
 
           {activeTab === 'cultivate' && (
             <div className="form-stack">
-              <h3 style={{ fontSize: '1.15rem' }}>Câmara de Refino Espiritual</h3>
+              <h3 style={{ fontSize: '1.15rem' }}>{t('cultivate.title')}</h3>
               <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                Refine <strong>Pedras Espirituais</strong> para absorver <strong>Qi de Cultivo</strong> e ascender sua{' '}
-                <strong>Patente do Reino</strong> (multiplicador de atributos). O nível de combate evolui apenas na Caça.
+                {t('cultivate.description')}
               </p>
 
               <div
@@ -732,9 +750,9 @@ export function CharacterHud({
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.3rem' }}>
-                  <span>Fadiga Mental (-1% / 2min)</span>
+                  <span>{t('cultivate.fatigue')}</span>
                   <strong style={{ color: fatiguePct >= 70 ? '#f87171' : '#c084fc' }}>
-                    {fatiguePct}% (Eficiência {efficiencyPct}%)
+                    {fatiguePct}% ({t('cultivate.efficiency', { pct: efficiencyPct })})
                   </strong>
                 </div>
                 <div style={{ height: '7px', background: '#111827', borderRadius: '999px', overflow: 'hidden' }}>
@@ -756,7 +774,7 @@ export function CharacterHud({
 
               <div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
-                  Quantidade de Pedras para Refinar:
+                  {t('cultivate.stonesAmountLabel')}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem' }}>
                   {[1, 3, 5, 10].map((qty) => {
@@ -779,7 +797,7 @@ export function CharacterHud({
                           cursor: 'pointer',
                         }}
                       >
-                        {qty} {qty === 1 ? 'Pedra' : 'Pedras'}
+                        {t('cultivate.stoneUnit', { count: qty })}
                       </button>
                     );
                   })}
@@ -798,19 +816,19 @@ export function CharacterHud({
                 }}
               >
                 <div>
-                  <span style={{ color: 'var(--text-muted)' }}>Custo Pedras: </span>
+                  <span style={{ color: 'var(--text-muted)' }}>{t('cultivate.costStones')} </span>
                   <strong style={{ color: 'var(--gold-primary)' }}>{stonesBatch}</strong>
                 </div>
                 <div>
-                  <span style={{ color: 'var(--text-muted)' }}>Custo Energia: </span>
+                  <span style={{ color: 'var(--text-muted)' }}>{t('cultivate.costEnergy')} </span>
                   <strong style={{ color: '#38bdf8' }}>{previewEnergyCost}⚡</strong>
                 </div>
                 <div>
-                  <span style={{ color: 'var(--text-muted)' }}>Cooldown: </span>
+                  <span style={{ color: 'var(--text-muted)' }}>{t('cultivate.cooldown')} </span>
                   <strong>{previewCooldownSec}s</strong>
                 </div>
                 <div>
-                  <span style={{ color: 'var(--text-muted)' }}>Ganho Qi: </span>
+                  <span style={{ color: 'var(--text-muted)' }}>{t('cultivate.qiGain')} </span>
                   <strong style={{ color: '#c084fc' }}>+{previewQiGain} Qi</strong>
                 </div>
               </div>
@@ -822,22 +840,25 @@ export function CharacterHud({
                 onClick={handleMeditate}
               >
                 {meditateMutation.isPending
-                  ? 'Refinando Pedras Espirituais...'
+                  ? t('cultivate.btnMeditating')
                   : cooldownLeft > 0
-                  ? `Estabilizando Meridianos (${cooldownLeft}s)`
+                  ? t('cultivate.btnCooldown', { seconds: cooldownLeft })
                   : isSaturated
-                  ? 'Fadiga Crítica (Aguarde Descanso)'
+                  ? t('cultivate.btnSaturated')
                   : character.spirit_stones < stonesBatch
-                  ? `Pedras Insuficientes (${stonesBatch})`
+                  ? t('cultivate.btnNoStones', { stones: stonesBatch })
                   : character.energy < previewEnergyCost
-                  ? `Energia Insuficiente (${previewEnergyCost}⚡)`
-                  : `Meditar & Refinar (-${stonesBatch} Pedras | -${previewEnergyCost}⚡)`}
+                  ? t('cultivate.btnNoEnergy', { energy: previewEnergyCost })
+                  : t('cultivate.btnMeditate', {
+                      stones: stonesBatch,
+                      energy: previewEnergyCost,
+                    })}
               </button>
 
               {battleHistory.length > 0 && (
                 <div style={{ marginTop: '0.6rem' }}>
                   <h4 style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                    Últimas Expedições
+                    {t('cultivate.recentHistory')}
                   </h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                     {battleHistory.slice(0, 5).map((h) => (
@@ -853,10 +874,11 @@ export function CharacterHud({
                         }}
                       >
                         <span>
-                          {h.outcome === 'victory' ? '🏆' : '💀'} {h.monster?.name ?? 'Besta'}
+                          {h.outcome === 'victory' ? '🏆' : '💀'}{' '}
+                          {h.monster ? tMonsterName(t, h.monster) : t('cultivate.beastFallback')}
                         </span>
                         <span style={{ color: h.outcome === 'victory' ? 'var(--jade-accent)' : '#fca5a5' }}>
-                          {h.outcome === 'victory' ? `+${h.xp_gained} XP` : 'Derrota'}
+                          {h.outcome === 'victory' ? `+${h.xp_gained} XP` : t('cultivate.defeat')}
                         </span>
                       </div>
                     ))}
@@ -907,7 +929,7 @@ export function CharacterHud({
 
           {activeTab === 'bag' && (
             <div className="form-stack">
-              <h3 style={{ fontSize: '1.15rem' }}>Equipamentos Ativos</h3>
+              <h3 style={{ fontSize: '1.15rem' }}>{t('bag.title')}</h3>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
                 {equippedSlots.map(({ slot, label, equipped }) => (
@@ -937,7 +959,7 @@ export function CharacterHud({
                             margin: '0.2rem 0',
                           }}
                         >
-                          {equipped.item.name}
+                          {tItemName(t, equipped.item)}
                         </div>
                         <button
                           type="button"
@@ -958,12 +980,12 @@ export function CharacterHud({
                             cursor: 'pointer',
                           }}
                         >
-                          Remover
+                          {t('bag.remove')}
                         </button>
                       </>
                     ) : (
                       <div style={{ fontSize: '0.74rem', color: '#4b5563', marginTop: '0.3rem' }}>
-                        Vazio
+                        {t('bag.emptySlot')}
                       </div>
                     )}
                   </div>
@@ -993,10 +1015,10 @@ export function CharacterHud({
               </div>
 
               {isLoadingInventory ? (
-                <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>Abrindo anel espacial...</p>
+                <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>{t('bag.loading')}</p>
               ) : filteredInventory.length === 0 ? (
                 <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>
-                  Nenhum item nesta categoria.
+                  {t('bag.emptyCategory')}
                 </p>
               ) : (
                 <div className="form-stack">
@@ -1018,10 +1040,12 @@ export function CharacterHud({
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <strong style={{ color: rColor, fontSize: '0.94rem' }}>
-                            {item.name} {entry.quantity > 1 ? `(x${entry.quantity})` : ''}
+                            {tItemName(t, item)} {entry.quantity > 1 ? `(x${entry.quantity})` : ''}
                           </strong>
                           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                            {entry.is_equipped ? '✅ Equipado' : TYPE_LABELS[item.type]}
+                            {entry.is_equipped
+                              ? t('bag.equippedBadge')
+                              : t(`bag.types.${item.type}`)}
                           </span>
                         </div>
 
@@ -1052,7 +1076,7 @@ export function CharacterHud({
                                 cursor: 'pointer',
                               }}
                             >
-                              Usar
+                              {t('bag.use')}
                             </button>
                           ) : (
                             <button
@@ -1076,7 +1100,9 @@ export function CharacterHud({
                                 cursor: 'pointer',
                               }}
                             >
-                              {entry.is_equipped ? 'Desequipar' : `Equipar (Nv.${item.required_level})`}
+                              {entry.is_equipped
+                                ? t('bag.unequip')
+                                : t('bag.equip', { level: item.required_level })}
                             </button>
                           )}
 
@@ -1101,7 +1127,7 @@ export function CharacterHud({
                                 cursor: 'pointer',
                               }}
                             >
-                              Vender (+{item.sell_price})
+                              {t('bag.sell', { price: item.sell_price })}
                             </button>
                           )}
                         </div>
@@ -1115,7 +1141,7 @@ export function CharacterHud({
 
           {activeTab === 'shop' && (
             <div className="form-stack">
-              <h3 style={{ fontSize: '1.15rem' }}>Pavilhão de Tesouros</h3>
+              <h3 style={{ fontSize: '1.15rem' }}>{t('shop.title')}</h3>
 
               <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
                 {filterOptions.map((f) => (
@@ -1140,7 +1166,7 @@ export function CharacterHud({
               </div>
 
               {isLoadingInventory ? (
-                <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>Carregando catálogo...</p>
+                <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)' }}>{t('shop.loading')}</p>
               ) : (
                 <div className="form-stack">
                   {filteredShop.map((item) => {
@@ -1159,14 +1185,17 @@ export function CharacterHud({
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <strong style={{ color: rColor, fontSize: '0.94rem' }}>{item.name}</strong>
+                          <strong style={{ color: rColor, fontSize: '0.94rem' }}>
+                            {tItemName(t, item)}
+                          </strong>
                           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                            {TYPE_LABELS[item.type]} • Nv.{item.required_level}
+                            {t(`bag.types.${item.type}`)} •{' '}
+                            {t('common.levelShort', { level: item.required_level })}
                           </span>
                         </div>
 
                         <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                          {item.description}
+                          {tItemDesc(t, item)}
                         </p>
 
                         <div style={{ fontSize: '0.76rem', color: 'var(--jade-accent)', marginTop: '0.25rem' }}>
@@ -1183,7 +1212,7 @@ export function CharacterHud({
                           }}
                         >
                           <strong style={{ fontSize: '0.82rem', color: 'var(--gold-primary)' }}>
-                            {item.buy_price} Pedras
+                            {item.buy_price} {t('common.stonesShort')}
                           </strong>
 
                           <div style={{ display: 'flex', gap: '0.4rem' }}>
@@ -1214,7 +1243,7 @@ export function CharacterHud({
                                 cursor: canBuy1 ? 'pointer' : 'not-allowed',
                               }}
                             >
-                              Comprar x1
+                              {t('shop.buyOne')}
                             </button>
 
                             {item.type === 'consumable' && (
